@@ -1,63 +1,50 @@
-# Real-Time Exam Surveillance System (OmniSurv Enterprise)
+# OmniSurv Enterprise — Autonomous AI Exam Surveillance System
 
-An AI-powered, autonomous proctoring and exam surveillance platform that monitors exam environments in real-time, detects suspicious behavior using computer vision and Vision-Language Models (VLMs), tracks live candidate attendance, and generates forensic compliance dossiers for academic institutions and certification centers.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18.0%2B-61DAFB.svg)](https://reactjs.org/)
+[![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-FF6F00.svg)](https://ultralytics.com/)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-FaceLandmarker-007FFF.svg)](https://developers.google.com/mediapipe)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
-
-## 🚀 Recent Updates & Enhancements
-
-### 1. Sleek Minimalist Enterprise UI/UX Overhaul
-- **Obsidian Dark Design System**: Redesigned from the ground up using a Linear/Vercel-inspired dark theme (`#09090b` / `#0f0f12`), hairline subtle zinc borders (`rgba(255,255,255,0.07)`), frosted glass cards (`.glass-panel`, `.glass-card`), and custom dark scrollbars.
-- **Enterprise Typography**: Integrated Google Fonts (`Inter` 300–800 for clean enterprise hierarchy, `JetBrains Mono` for real-time telemetry metrics, timecodes, and tracking IDs).
-- **Iconography & Micro-Interactions**: Eliminated all raw emojis in favor of Lucide feather icons with glowing badge containers and status indicators.
-- **Tactical Camera Monitor HUD**: High-tech camera card framing with resolution/FPS badges (`LIVE 1080p · 30 FPS`), tactical bounding box overlays (`TRK #...`), signal status badges, and rapid proctoring controls.
-- **Top Command Bar**: Live WebSocket connectivity indicators with glowing pulse, stream latency pills, active exam hall breadcrumb, role status tags, and quick-action toolbars.
-
-### 2. Live Dynamic Attendance & Candidate Roster Desk
-- **Automated Cohort Seeding**: When an exam hall is initialized with an enrolled capacity, candidate records (`REG-2024001` to `REG-2024030`, `Candidate 01`...) are automatically enrolled and linked to the session hall.
-- **Computer Vision Dynamic Check-In**: When YOLO detects a candidate in the camera feed, the backend automatically binds the detection to an enrolled student, marks them `CHECKED_IN`, sets their live track ID (`TRK #...`), and records `check_in_time`.
-- **Candidate Roster & Attendance Desk (`/roster`)**:
-  - Live attendance telemetry cards (`Enrolled Capacity`, `Present / Checked In`, `Pending`, `Departed`).
-  - Real-time Attendance Ratio progress bar (e.g., `29 of 30 Verified · 97%`).
-  - Search candidates by Name, Roll Number, or Seat Number with status filter chips.
-  - 1-click candidate Check-In and Check-Out.
-  - 1-click **"Mark All Present"** batch check-in (`POST /api/exams/{id}/participants/batch-checkin`).
-- **Sidebar Live Telemetry Footer**: Real-time attendance meter and animated progress bar (e.g. `29/30 (97%)`) visible across all workspace tabs.
-
-### 3. Forensic Evidence Dossier & Media Downloads
-- **Export Forensic Dossier (`.pdf`)**: Server-side ReportLab document generation (`/api/exams/{id}/report?format=pdf`), including:
-  - Session metadata (hall name, location, scheduled times, duration).
-  - Telemetry summary statistics and infraction percentages.
-  - Violation distribution breakdown table.
-  - Candidate attendance and risk score roster.
-  - Chronological incident evidence screenshots with timecodes, severity badges, and Vision-Language Model (VLM) reasoning notes.
-- **Individual Incident Media Downloads**:
-  - Evidence video clips download as **`.mp4`** files (`/api/events/{id}/clip`).
-  - High-resolution evidentiary keyframes download as **`.jpg`** / **`.png`** (`/api/events/{id}/screenshot`).
-  - Structured raw telemetry export as **`.json`** (`/api/exams/{id}/report?format=json`).
-
-### 4. Stability & Build Cleanliness
-- Configured IDE settings to suppress unknown CSS at-rule warnings and removed redundant client directives.
-- Resolved all React Hook dependency lint warnings for clean production builds (`npm run build` exits 0 with zero warnings).
-- Fixed Python backend name bindings (`uuid`, `utcnow`) and eliminated redundant string conversions.
+An enterprise-grade, autonomous exam surveillance and proctoring platform. OmniSurv monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
 
 ---
 
-## Features
+## 🌟 Key Capabilities
 
-- **Multi-person detection & tracking** across exam halls using YOLOv8 + ByteTrack
-- **Real-time behavior analysis** - eye gaze, head pose, facial expressions via MediaPipe FaceLandmarker
-- **Suspicious activity detection** - phone usage, cheat sheets, unauthorized items, abnormal posture, talking
-- **VLM-powered contextual analysis** - Moondream / Qwen-VL for multimodal behavior reasoning
-- **Live proctor dashboard** - multi-camera feeds, live HUD overlays, alerts, telemetry analytics
-- **Live Candidate Attendance Desk** - biometric tracking, automated CV check-in, manual proctor controls
-- **Forensic Evidence Dossiers** - downloadable timestamped PDF compliance reports and MP4 evidence clips
-- **Audio anomaly detection** - microphone RMS level capture (dB) for speech and ambient disturbance detection
-- **Role-Based Access Control (RBAC)** - Administrator, Chief Auditor, and Exam Proctor profiles
+### 1. Tactical Multi-Person Computer Vision
+- **YOLOv8 + ByteTrack**: Real-time multi-candidate detection, bounding-box tracking, and persistent spatial tracking IDs across frame drops.
+- **Unauthorized Item Detection**: Autonomous detection of mobile phones, concealed cheat sheets, smart devices, and books.
+- **MediaPipe 3D Face Landmarker**: High-fidelity 478-point facial mesh tracking head pose (pitch, yaw, roll), abnormal posture departures, eye gaze vectors, and face obscuration.
+- **Decibel Audio Telemetry**: Microphone RMS sound level capture (dB) for speech and room disturbance alerting.
+
+### 2. Multimodal VLM Behavioral Reasoning
+- **Deep Contextual Inspection**: Suspicious candidate crops are routed to Vision-Language Models (Qwen3-VL / Moondream) to eliminate false positives and verify cheating intent (e.g., hidden earpieces, whispering, peeking at neighbor's paper).
+- **Forensic Reasoning Logs**: Every flagged infraction includes natural language proctor notes and VLM rationales attached to the incident record.
+
+### 3. Live Dynamic Candidate Roster & Attendance Desk
+- **Automated Cohort Seeding**: Instantly generates enrolled student cohorts with registration IDs, roll numbers, and seat coordinates.
+- **Biometric CV Auto Check-In**: When a candidate enters the camera frame, the detection engine automatically binds the detection track to the student record, marks them `CHECKED_IN`, and records their arrival timestamp.
+- **Proctor Attendance Desk**: Search candidates by name or seat, toggle check-ins, or trigger 1-click **"Mark All Present"** batch verification.
+- **Global Attendance Telemetry**: Live verified ratio meters (e.g., `29 of 30 Verified · 97%`) visible across the top command bar and workspace tabs.
+
+### 4. Obsidian Dark Command Center
+- **Enterprise Design System**: Linear/Vercel-inspired dark theme (`#09090b` / `#0f0f12`), frosted glass cards (`.glass-panel`), and custom dark scrollbars.
+- **Tactical Camera Monitor HUD**: High-tech feed framing with resolution badges (`LIVE 1080p · 30 FPS`), tactical bounding box overlays (`TRK #...`), and live stream latency pills.
+- **Auditor Video Inspection Desk**: Scrub recorded evidence clips frame-by-frame with custom timecode playback and speed controls.
+
+### 5. Forensic Compliance Dossiers & Media Exports
+- **Exportable PDF Compliance Dossiers**: Server-side ReportLab document synthesis including session telemetry, infraction breakdowns, candidate risk scorecards, and keyframe evidence snapshots.
+- **Media Evidence Exports**: 1-click downloads for individual `.mp4` video clips, high-resolution `.jpg` keyframes, and raw structured `.json` telemetry.
+
+### 6. Role-Based Access Control (RBAC) & Governance
+- **Three Tiered Profiles**: `Administrator` (system settings & staff management), `Chief Auditor` (forensic reviews & compliance downloads), and `Exam Proctor` (live monitoring & flags).
+- **Two-Man Rule Governance**: Sensitive actions (e.g., candidate disqualification or audit log overrides) require secondary sign-off.
 
 ---
 
-## Architecture
+## 🏛️ System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -69,40 +56,34 @@ An AI-powered, autonomous proctoring and exam surveillance platform that monitor
 ├──────────────────────────────────────────────────────────────┤
 │  • Camera feeds (USB / RTSP / IP cameras / Video files)      │
 │  • Microphone audio capture (RMS dB level monitoring)        │
-│  • System clock synchronization (NTP / UTC)                  │
+│  • System clock synchronization (UTC)                        │
 └──────────────────────────────────────────────────────────────┘
                                ↓
 ┌──────────────────────────────────────────────────────────────┐
 │                AI COMPUTER VISION PIPELINE                   │
 ├──────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │ DETECTION & POSE (YOLOv8)                               │ │
-│  │ • Person detection, bounding boxes,cell phone detection │ │
-│  │ • Pose keypoint extraction                              │ │
+│  │ DETECTION & OBJECT TRACKING (YOLOv8 + ByteTrack)        │ │
+│  │ • Person detection, phone & cheat sheet bounding boxes  │ │
+│  │ • Track ID assignment & Candidate Roster Auto Check-In  │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                              ↓                               │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │ TRACKING & IDENTITY (ByteTrack)                         │ │
-│  │ • Consistent track IDs across frames                    │ │
-│  │ • Dynamic binding to Candidate Roster / Auto Check-In   │ │
-│  └─────────────────────────────────────────────────────────┘ │
-│                              ↓                               │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ FACIAL & GAZE ANALYSIS (MediaPipe)                      │ │
-│  │ • 468-point face mesh, eye gaze vector estimation       │ │
+│  │ FACIAL & GAZE ANALYSIS (MediaPipe FaceLandmarker)       │ │
+│  │ • 478-point 3D face mesh, gaze vector estimation        │ │
 │  │ • Head pose yaw/pitch/roll, abnormal posture tracking   │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                              ↓                               │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │ MULTIMODAL REASONING (Vision-Language Model)            │ │
-│  │ • Cropped candidate region analysis                     │ │
-│  │ • Cheating, earbud, communication detection             │ │
+│  │ • Target region crop analysis                           │ │
+│  │ • Hidden device, collaboration, and whispering audit    │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                              ↓                               │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │ ANOMALY DETECTOR & EVENT LOGGER                         │ │
-│  │ • Multi-rule heuristics, cooldown debouncing            │ │
-│  │ • Evidence video clipping & screenshot generation       │ │
+│  │ ANOMALY DETECTOR & EVENT RECORDER                       │ │
+│  │ • Multi-rule heuristic thresholds & debouncing          │ │
+│  │ • Automatic MP4 video clip synthesis & snapshot capture │ │
 │  │ • Real-time WebSocket broadcasting                      │ │
 │  └─────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────┘
@@ -122,97 +103,80 @@ An AI-powered, autonomous proctoring and exam surveillance platform that monitor
 
 ---
 
-## Technology Stack
+## 🚀 Quick Start
 
-### Backend
-- **Python 3.10+ / 3.11** with **FastAPI**
-- **YOLOv8** (Ultralytics) - Real-time candidate & object detection
-- **ByteTrack** - High-performance multi-object tracking
-- **MediaPipe** - 468-point Face Landmarker & head pose estimation
-- **Vision-Language Models (VLM)** - Moondream2 / Qwen3-VL for multimodal behavior reasoning
-- **ReportLab** - Automated PDF forensic report generation
-- **SQLAlchemy + SQLite / PostgreSQL** - Enterprise data persistence
-- **SoundDevice** - Microphone RMS audio level monitoring
-- **OpenCV & imageio-ffmpeg** - Frame processing and MP4 video clip synthesis
-
-### Frontend
-- **React 18** with functional components & hooks
-- **Tailwind CSS + Custom Obsidian Theme** - Dark enterprise SaaS design system
-- **Lucide React** - Modern vector iconography
-- **Recharts** - Dynamic telemetry and anomaly area charts
-- **Native WebSockets** - Low-latency binary video streaming and event pub/sub
-
----
-
-## Quick Start
-
-### 1. Prerequisites
+### Prerequisites
 - Python 3.10+ (managed via `pip`, `uv`, or virtual environment)
 - Node.js 18+ and npm
 - USB webcam, RTSP stream, or test video file
-- (Optional) NVIDIA GPU with CUDA for accelerated YOLOv8 and MediaPipe inference
+- *(Optional)* NVIDIA GPU with CUDA for accelerated YOLOv8 & MediaPipe inference
 
 ---
 
-### 2. 1-Click Automation (Windows)
+### Option A: 1-Click Launch (Windows)
 
-The repository includes pre-configured automation scripts that auto-detect Python, initialize `.env` from `.env.example`, ensure the local database directory exists, and launch both Backend and Frontend servers simultaneously:
+The repository includes a pre-configured automation script that auto-detects Python, ensures the local SQLite database directory exists, initializes `.env` from `.env.example`, and launches both Backend and Frontend servers:
 
 ```cmd
-# 1. Clone the repository
+# 1. Clone your repository
 git clone https://github.com/devwithsujay/Real-Time-Exam-Surveillance-System.git
 cd Real-Time-Exam-Surveillance-System
 
-# 2. Install dependencies (First-time setup)
+# 2. Install dependencies (First-time only)
 pip install -r requirements.txt
 cd frontend && npm install && cd ..
 
 # 3. Double-click or run:
 start_project.bat
 ```
-* **Frontend Dashboard**: Automatically launches and opens `http://localhost:3000` in your browser.
-* **Backend API Docs**: Running at `http://127.0.0.1:8000/docs`.
-* **To stop all services**: Run `stop_project.bat`.
+* **Frontend Dashboard**: Launches automatically at `http://localhost:3000`
+* **Backend API Docs**: Running at `http://127.0.0.1:8000/docs`
+* **Stop all services**: Run `stop_project.bat`
 
 ---
 
-### 3. Manual Step-by-Step Setup
+### Option B: Manual Step-by-Step Launch
 
-#### Backend Setup
+#### 1. Backend Server
 ```bash
-# Using standard pip
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Or using uv (ultra-fast package manager)
-uv run --directory backend uvicorn app.main:app --host 127.0.0.1 --port 8000
+# Start FastAPI backend
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-* Backend API documentation: `http://127.0.0.1:8000/docs`
-* Staff accounts are automatically seeded on first launch:
-  - **Administrator**: `admin` / `Admin@12345`
-  - **Chief Auditor**: `auditor1` / `Auditor@12345`
-  - **Exam Proctor**: `proctor1` / `Proctor@12345`
 
-#### Frontend Setup
+#### 2. Frontend Dashboard
 ```bash
 cd frontend
 npm install
 npm start
 ```
-* Dashboard will be live at `http://localhost:3000`
-* Built-in proxy automatically routes `/api` and `/ws` to `http://localhost:8000`.
 
 ---
 
-## API Endpoints Reference
+### Default Test Staff Accounts
+
+Staff accounts are automatically seeded into the database on first run:
+
+| Role | Username | Default Password | Permissions |
+| :--- | :--- | :--- | :--- |
+| **Administrator** | `admin` | `Admin@12345` | Full system governance, staff management, exam hall creation |
+| **Chief Auditor** | `auditor1` | `Auditor@12345` | Forensic evidence inspection, PDF compliance export, audit logs |
+| **Exam Proctor** | `proctor1` | `Proctor@12345` | Live video HUD, attendance desk, real-time infraction flags |
+
+---
+
+## 📡 API Reference
 
 ### Exams & Sessions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/exams` | Configure and initialize new exam hall session |
+| `POST` | `/api/exams` | Configure and initialize a new exam hall session |
 | `GET` | `/api/exams` | List all exam sessions with pagination |
 | `GET` | `/api/exams/{id}` | Get session details, duration, and status |
 | `PUT` | `/api/exams/{id}` | Update session configuration |
-| `DELETE`| `/api/exams/{id}` | Delete exam session |
+| `DELETE`| `/api/exams/{id}` | Delete an exam session |
 | `POST` | `/api/exams/{id}/start` | Begin AI computer vision proctoring pipeline |
 | `POST` | `/api/exams/{id}/end` | Terminate session and compile final statistics |
 | `GET` | `/api/exams/{id}/analytics`| Real-time aggregated telemetry and metrics |
@@ -223,13 +187,13 @@ npm start
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/exams/{id}/participants` | List enrolled candidate roster with attendance status |
-| `POST` | `/api/exams/{id}/participants` | Register candidate with seat and camera assignment |
-| `POST` | `/api/exams/{id}/participants/batch-checkin` | 1-click batch check-in for all pending students |
+| `POST` | `/api/exams/{id}/participants` | Register a candidate with seat and camera assignment |
+| `POST` | `/api/exams/{id}/participants/batch-checkin` | 1-click batch check-in for all pending candidates |
 | `POST` | `/api/participants/{id}/checkin` | Verify and check in individual candidate |
-| `POST` | `/api/participants/{id}/checkout`| Check out candidate from hall |
+| `POST` | `/api/participants/{id}/checkout`| Check out candidate from exam hall |
 | `GET` | `/api/participants/{id}/analytics`| Individual candidate integrity and flag history |
 
-### Incidents & Audit
+### Incidents & Forensics
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/exams/{id}/events` | Query chronological audit log with severity/type filters |
@@ -238,19 +202,19 @@ npm start
 | `GET` | `/api/events/{id}/clip` | Stream or download evidentiary MP4 video clip |
 | `GET` | `/api/events/{id}/screenshot`| Download incident evidentiary keyframe screenshot |
 
-### Authentication & RBAC
+### Authentication & Governance
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/auth/login` | Authenticate staff account and obtain JWT Bearer token |
-| `GET` | `/api/auth/me` | Retrieve profile of authenticated user |
+| `POST` | `/api/auth/login` | Authenticate staff account and obtain JWT token |
+| `GET` | `/api/auth/me` | Retrieve profile of current authenticated user |
 | `GET` | `/api/auth/users` | List staff directory (Administrator only) |
 | `POST` | `/api/auth/users` | Create staff account with role permissions |
-| `GET` | `/api/auth/pending-actions` | View two-man rule sensitive actions requiring approval |
+| `GET` | `/api/auth/pending-actions` | View actions requiring dual authorization |
 | `POST` | `/api/auth/pending-actions/{id}/approve` | Approve or reject pending dual-authorization action |
 
 ---
 
-## Project Structure
+## 🗂️ Project Structure
 
 ```
 Real-Time-Exam-Surveillance-System/
@@ -319,19 +283,21 @@ Real-Time-Exam-Surveillance-System/
 
 ---
 
-## Testing & Quality Assurance
+## 🧪 Testing & Verification
+
+Run the comprehensive end-to-end integration and benchmark test suite:
 
 ```bash
-# Run complete test suite and benchmarks
+# Run system integration test suite
 python test_surveillance_system.py --url http://127.0.0.1:8000
 
-# Run frontend build verification
+# Verify clean production frontend build
 cd frontend
 npm run build
 ```
 
 ---
 
-## License
+## 📄 License
 
-MIT License — see [LICENSE](LICENSE) for details.
+Distributed under the MIT License. See `LICENSE` for more information.
