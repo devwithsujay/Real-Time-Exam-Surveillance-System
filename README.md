@@ -1,4 +1,4 @@
-# OmniSurv Enterprise — Autonomous AI Exam Surveillance System
+# ARGUS — Autonomous AI Exam Surveillance System
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688.svg)](https://fastapi.tiangolo.com/)
@@ -7,7 +7,7 @@
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-FaceLandmarker-007FFF.svg)](https://developers.google.com/mediapipe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An enterprise-grade, autonomous exam surveillance and proctoring platform. OmniSurv monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
+An enterprise-grade, autonomous exam surveillance and proctoring platform named after **Argus Panoptes** — the all-seeing hundred-eyed giant of Greek mythology. **ARGUS** monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
 
 ---
 
@@ -48,7 +48,7 @@ An enterprise-grade, autonomous exam surveillance and proctoring platform. OmniS
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│               OMNISURV ENTERPRISE ARCHITECTURE              │
+│                    ARGUS ARCHITECTURE                       │
 └─────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐

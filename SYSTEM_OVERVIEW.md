@@ -1,8 +1,8 @@
-# Real-Time Exam Surveillance System (OmniSurv Enterprise) — Complete System Overview
+# ARGUS Exam Surveillance Platform — Complete System Overview
 
 ## Executive Summary
 
-The Real-Time Exam Surveillance System (OmniSurv Enterprise) is a production-grade autonomous proctoring and surveillance command platform. It combines YOLOv8 multi-class detection (person + cell phone + unauthorized items), MediaPipe 478-point 3D face landmark and eye gaze tracking, microphone decibel audio telemetry, and local Vision-Language Model (VLM) reasoning to detect exam integrity violations in real-time. 
+**ARGUS** (named after **Argus Panoptes**, the all-seeing hundred-eyed giant and watchful guardian of Greek mythology) is a production-grade autonomous proctoring and surveillance command platform. It combines YOLOv8 multi-class detection (person + cell phone + unauthorized items), MediaPipe 478-point 3D face landmark and eye gaze tracking, microphone decibel audio telemetry, and local Vision-Language Model (VLM) reasoning to detect exam integrity violations in real-time. 
 
 Built on a decoupled architecture with FastAPI (backend) and React 18 (frontend) powered by SQLite/PostgreSQL and Redis, the platform captures multi-stream video and audio, evaluates an 8-rule anomaly detection matrix with anti-spam cooldowns, records forensic evidence (timecoded screenshots, 5-second MP4 video clips, and cryptographic audit logs), and streams low-latency annotated video feeds to a tactical browser dashboard via token-authenticated WebSockets. 
 

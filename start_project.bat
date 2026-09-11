@@ -1,10 +1,10 @@
 @echo off
-title OmniSurv Enterprise Launcher
+title ARGUS Surveillance System Launcher
 chcp 65001 >nul
 cls
 
 echo ======================================================================
-echo          OMNISURV ENTERPRISE - REAL-TIME EXAM SURVEILLANCE
+echo             ARGUS - AUTONOMOUS AI EXAM SURVEILLANCE
 echo ======================================================================
 echo.
 
@@ -32,13 +32,13 @@ if exist "%~dp0.venv\Scripts\python.exe" (
 
 echo [*] Python Interpreter: "%PY_CMD%"
 echo [*] Launching FastAPI Backend (Port 8000)...
-start "OmniSurv Backend (FastAPI :8000)" /D "%~dp0backend" cmd /k "set PYTHONPATH=.;..& call "%PY_CMD%" -u -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info"
+start "ARGUS Backend (FastAPI :8000)" /D "%~dp0backend" cmd /k "set PYTHONPATH=.;..& call "%PY_CMD%" -u -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info"
 
 echo [*] Waiting for Backend to initialize...
 ping 127.0.0.1 -n 5 >nul
 
 echo [*] Launching React Frontend Dashboard (Port 3000)...
-start "OmniSurv Frontend (React :3000)" /D "%~dp0frontend" cmd /k "npm start"
+start "ARGUS Frontend (React :3000)" /D "%~dp0frontend" cmd /k "npm start"
 
 echo.
 echo ======================================================================

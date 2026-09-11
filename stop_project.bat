@@ -1,9 +1,9 @@
 @echo off
-title Stop OmniSurv Enterprise
+title Stop ARGUS Surveillance System
 cls
 
 echo ======================================================================
-echo          STOPPING OMNISURV ENTERPRISE SERVICES
+echo              STOPPING ARGUS SURVEILLANCE SERVICES
 echo ======================================================================
 echo.
 
@@ -18,6 +18,6 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000" ^| findstr "LISTENING
 )
 
 echo.
-echo [*] Done! All OmniSurv services stopped.
+echo [*] Done! All ARGUS services stopped.
 timeout /t 3
 exit
