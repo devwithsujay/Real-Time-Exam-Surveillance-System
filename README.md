@@ -276,10 +276,23 @@ Real-Time-Exam-Surveillance-System/
 ├── run_all.bat                      # Unified test & launch script
 ├── test_surveillance_system.py      # Full test runner & benchmark suite
 ├── SYSTEM_OVERVIEW.md               # Detailed system architecture document
+├── TODO.md                          # Enterprise production scaling roadmap & guides
 ├── .env.example                     # Environment configuration template
 ├── .gitignore                       # Production gitignore rules
 └── README.md                        # Enterprise documentation
 ```
+
+---
+
+## 🗺️ Enterprise Production Roadmap
+
+For engineering teams looking to scale ARGUS from single-room testing to **Fortune-500 campus scale** (500+ simultaneous exam halls, 10,000+ examinees), see the complete technical blueprint and implementation guides in **[TODO.md](TODO.md)**:
+
+- **Phase 1**: High-Concurrency PostgreSQL Pool & Alembic Database Migrations
+- **Phase 2**: Decoupled AI Inference Worker Pool (Celery + Redis / Ray Serve GPU workers)
+- **Phase 3**: Ultra-Low-Latency WebRTC Streaming Cluster (LiveKit / MediaSoup SFU)
+- **Phase 4**: Acoustic Intelligence (Whisper AI Real-Time Speech Transcription & VAD)
+- **Phase 5**: Cloud-Native Kubernetes & Elastic Autoscaling (Helm + KEDA GPU autoscaling)
 
 ---
 
