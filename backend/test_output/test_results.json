@@ -1,0 +1,349 @@
+{
+  "generated_at": "2026-09-06T11:34:49.896882",
+  "summary": {
+    "total": 33,
+    "passed": 3,
+    "failed": 30,
+    "warned": 0,
+    "skipped": 0,
+    "duration_seconds": 0.10587573051452637,
+    "suites": 9
+  },
+  "suites": [
+    {
+      "name": "Import Validation",
+      "passed": 0,
+      "failed": 22,
+      "warned": 0,
+      "skipped": 0,
+      "total": 22,
+      "results": [
+        {
+          "name": "import fastapi",
+          "status": "FAIL",
+          "message": "FastAPI web framework not installed: No module named 'fastapi'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import uvicorn",
+          "status": "FAIL",
+          "message": "ASGI server not installed: No module named 'uvicorn'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import cv2",
+          "status": "FAIL",
+          "message": "OpenCV not installed: No module named 'cv2'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import numpy",
+          "status": "FAIL",
+          "message": "NumPy not installed: No module named 'numpy'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import sqlalchemy",
+          "status": "FAIL",
+          "message": "SQLAlchemy ORM not installed: No module named 'sqlalchemy'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import pydantic",
+          "status": "FAIL",
+          "message": "Pydantic schemas not installed: No module named 'pydantic'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import pydantic_settings",
+          "status": "FAIL",
+          "message": "Pydantic settings not installed: No module named 'pydantic_settings'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import ultralytics",
+          "status": "FAIL",
+          "message": "YOLOv8 (ultralytics) not installed: No module named 'ultralytics'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import mediapipe",
+          "status": "FAIL",
+          "message": "MediaPipe not installed: No module named 'mediapipe'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import torch",
+          "status": "FAIL",
+          "message": "PyTorch not installed: No module named 'torch'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import PIL",
+          "status": "FAIL",
+          "message": "Pillow not installed: No module named 'PIL'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.config",
+          "status": "FAIL",
+          "message": "Configuration failed: No module named 'pydantic_settings'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.database",
+          "status": "FAIL",
+          "message": "Database engine failed: No module named 'sqlalchemy'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.models",
+          "status": "FAIL",
+          "message": "ORM models failed: No module named 'sqlalchemy'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.schemas",
+          "status": "FAIL",
+          "message": "Pydantic schemas failed: No module named 'pydantic'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.crud",
+          "status": "FAIL",
+          "message": "CRUD operations failed: No module named 'sqlalchemy'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.services.camera_manager",
+          "status": "FAIL",
+          "message": "Camera manager failed: No module named 'cv2'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.services.detection_engine",
+          "status": "FAIL",
+          "message": "Detection engine failed: No module named 'cv2'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.services.tracking_engine",
+          "status": "FAIL",
+          "message": "Tracking engine failed: No module named 'app.services.tracking_engine'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.services.mediapipe_analyzer",
+          "status": "FAIL",
+          "message": "MediaPipe analyzer failed: No module named 'cv2'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.services.anomaly_detector",
+          "status": "FAIL",
+          "message": "Anomaly detector failed: No module named 'cv2'",
+          "duration_ms": 0.0,
+          "details": {}
+        },
+        {
+          "name": "import app.services.event_logger",
+          "status": "FAIL",
+          "message": "Event logger failed: No module named 'cv2'",
+          "duration_ms": 0.0,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "Configuration",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "config load",
+          "status": "FAIL",
+          "message": "No module named 'pydantic_settings'",
+          "duration_ms": 0.0,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "Database",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "database",
+          "status": "FAIL",
+          "message": "No module named 'sqlalchemy'\nTraceback (most recent call last):\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\test_surveillance_system.py\", line 235, in test_database\n    from app.database import init_db, get_db, engine\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\database.py\", line 2, in <module>\n    from sqlalchemy import create_engine, event\nModuleNotFoundError: No module named 'sqlalchemy'\n",
+          "duration_ms": 0.0,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "ORM Models",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "models",
+          "status": "FAIL",
+          "message": "No module named 'sqlalchemy'\nTraceback (most recent call last):\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\test_surveillance_system.py\", line 287, in test_models\n    from app.models import (\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\models\\__init__.py\", line 3, in <module>\n    from sqlalchemy import (\nModuleNotFoundError: No module named 'sqlalchemy'\n",
+          "duration_ms": 18.848180770874023,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "Detection Engine (YOLOv8)",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "detection engine",
+          "status": "FAIL",
+          "message": "No module named 'cv2'\nTraceback (most recent call last):\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\test_surveillance_system.py\", line 350, in test_detection_engine\n    from app.services.detection_engine import DetectionEngine, Detection, DetectionResult\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\services\\detection_engine.py\", line 1, in <module>\n    import cv2\nModuleNotFoundError: No module named 'cv2'\n",
+          "duration_ms": 3.442049026489258,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "Tracking Engine",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "tracking engine",
+          "status": "FAIL",
+          "message": "No module named 'cv2'\nTraceback (most recent call last):\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\test_surveillance_system.py\", line 423, in test_tracking_engine\n    from app.services.detection_engine import DetectionEngine, Detection\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\services\\detection_engine.py\", line 1, in <module>\n    import cv2\nModuleNotFoundError: No module named 'cv2'\n",
+          "duration_ms": 0.0,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "Anomaly Detector",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "anomaly detector",
+          "status": "FAIL",
+          "message": "No module named 'cv2'\nTraceback (most recent call last):\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\test_surveillance_system.py\", line 478, in test_anomaly_detector\n    from app.services.anomaly_detector import AnomalyDetector, Alert, AlertType, AlertSeverity, MoondreamAnalysis\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\services\\anomaly_detector.py\", line 8, in <module>\n    from app.services.mediapipe_analyzer import FaceAnalysis\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\services\\mediapipe_analyzer.py\", line 1, in <module>\n    import cv2\nModuleNotFoundError: No module named 'cv2'\n",
+          "duration_ms": 0.0,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "MediaPipe Analyzer",
+      "passed": 0,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 1,
+      "results": [
+        {
+          "name": "mediapipe analyzer",
+          "status": "FAIL",
+          "message": "No module named 'cv2'\nTraceback (most recent call last):\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\test_surveillance_system.py\", line 550, in test_mediapipe\n    from app.services.mediapipe_analyzer import MediaPipeAnalyzer, FaceAnalysis\n  File \"C:\\Users\\sujay\\Downloads\\Real Time ESS\\backend\\app\\services\\mediapipe_analyzer.py\", line 1, in <module>\n    import cv2\nModuleNotFoundError: No module named 'cv2'\n",
+          "duration_ms": 0.0,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "name": "API Integration",
+      "passed": 3,
+      "failed": 1,
+      "warned": 0,
+      "skipped": 0,
+      "total": 4,
+      "results": [
+        {
+          "name": "GET /health",
+          "status": "PASS",
+          "message": "Status: HEALTHY, uptime: 785.0s",
+          "duration_ms": 18.07117462158203,
+          "details": {
+            "status": "HEALTHY",
+            "timestamp": "2026-09-06T06:04:49.861050+00:00",
+            "version": "1.0.0",
+            "uptime_seconds": 785.0,
+            "database": "CONNECTED",
+            "redis": "CONNECTED",
+            "gpu": "AVAILABLE",
+            "components": {
+              "camera_manager": "READY",
+              "detection_engine": "READY",
+              "mediapipe_analyzer": "READY",
+              "anomaly_detector": "READY"
+            }
+          }
+        },
+        {
+          "name": "GET /api/exams",
+          "status": "PASS",
+          "message": "Found 40 exams",
+          "duration_ms": 18.78809928894043,
+          "details": {}
+        },
+        {
+          "name": "POST /api/exams",
+          "status": "FAIL",
+          "message": "HTTP Error 401: Unauthorized",
+          "duration_ms": 0,
+          "details": {}
+        },
+        {
+          "name": "API integration",
+          "status": "PASS",
+          "message": "",
+          "duration_ms": 83.58550071716309,
+          "details": {}
+        }
+      ]
+    }
+  ]
+}

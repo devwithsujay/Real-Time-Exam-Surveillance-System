@@ -43,26 +43,11 @@ Thumbs.db
 *.log
 logs/
 
-# Data
-data/
-*.db
-*.sqlite
-*.sqlite3
+# Raw video recordings (heavy clips)
+data/clips/
+*.mp4
 
-# Models
-*.pt
-*.bin
-*.task
-models/*.pt
-models/*.bin
-models/*.task
-backend/models/*.pt
-
-# Agent customizations & local tools
-.agents/
-graphify-out/
-test_output/
-**/test_output/
+# Cache
 .pytest_cache/
 
 # Docker
