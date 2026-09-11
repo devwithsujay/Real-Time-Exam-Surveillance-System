@@ -1,0 +1,84 @@
+[tool.poetry]
+name = "exam-surveillance"
+version = "1.0.0"
+description = "Real-Time Exam Surveillance System"
+authors = ["Sujay <sujay@example.com>"]
+readme = "README.md"
+packages = [{include = "app", from = "backend"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.104"
+uvicorn = {extras = ["standard"], version = "^0.24"}
+opencv-python = "^4.8"
+ultralytics = "^8.0"
+mediapipe = "^0.10"
+sqlalchemy = "^2.0"
+pydantic = {extras = ["email"], version = "^2.0"}
+pydantic-settings = "^2.0"
+python-multipart = "^0.0.6"
+websockets = "^12.0"
+python-dotenv = "^1.0"
+numpy = "^1.24"
+torch = {extras = ["cpu"], version = "^2.0"}
+pillow = "^10.0"
+reportlab = "^4.0"
+httpx = "^0.25"
+redis = "^5.0"
+sounddevice = "^0.4.6"
+imageio-ffmpeg = "^0.4.9"
+psutil = "^7.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+pytest-asyncio = "^0.21"
+pytest-cov = "^4.1"
+black = "^23.0"
+pylint = "^3.0"
+mypy = "^1.0"
+bandit = "^1.7"
+isort = "^5.12"
+pre-commit = "^3.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["backend/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

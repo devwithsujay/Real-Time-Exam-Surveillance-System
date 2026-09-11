@@ -1,0 +1,637 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap');
+
+:root {
+  /* ── 1. ARGUS v2 Canvas & Surfaces (Warm Near-Black, No Blue Cast) ─── */
+  --canvas: #121011;
+  --surface: #1a1719;
+  --surface-raised: #221e20;
+  --surface-sunken: #0b0a0a;
+  --surface-solid: rgba(26, 23, 25, 0.97);
+
+  /* ── Structural Borders ────────────────────────────────────────────── */
+  --border: rgba(244, 241, 235, 0.07);
+  --border-strong: rgba(244, 241, 235, 0.14);
+  --border-hover: rgba(244, 241, 235, 0.22);
+  --border-focus: #b8789a;
+
+  /* ── Ink (Typography) ──────────────────────────────────────────────── */
+  --ink: #f0ece4;         /* 16.1 : 1 on canvas */
+  --ink-muted: #a89f97;   /*  7.3 : 1 on canvas */
+  --ink-faint: #6b6560;   /*  3.3 : 1 — decorative/disabled only */
+
+  /* ── Brand Accent: Muted Plum / Academic Wine (~330° Hue Wheel) ───── */
+  --accent: #8a4a6b;
+  --accent-hover: #9b5579;
+  --accent-text: #b8789a; /* 5.6 : 1 on canvas, 4.9 : 1 on surface-raised */
+  --accent-wash: rgba(138, 74, 107, 0.12);
+  --accent-border: rgba(138, 74, 107, 0.35);
+
+  /* ── Semantic Severity (Harmonized to Warm Canvas, Distinct from Plum) */
+  --critical: #c76454;
+  --critical-bg: rgba(199, 100, 84, 0.12);
+  --critical-border: rgba(199, 100, 84, 0.35);
+
+  --high: #c98a52;
+  --high-bg: rgba(201, 138, 82, 0.12);
+  --high-border: rgba(201, 138, 82, 0.35);
+
+  --medium: #c2ab5c;
+  --medium-bg: rgba(194, 171, 92, 0.12);
+  --medium-border: rgba(194, 171, 92, 0.35);
+
+  --low: #6b9ab5;
+  --low-bg: rgba(107, 154, 181, 0.12);
+  --low-border: rgba(107, 154, 181, 0.35);
+
+  --good: #6ba883;
+  --good-bg: rgba(107, 168, 131, 0.12);
+  --good-border: rgba(107, 168, 131, 0.35);
+
+  --neutral: #8f8883;
+  --neutral-bg: rgba(143, 136, 131, 0.10);
+  --neutral-border: rgba(143, 136, 131, 0.22);
+
+  /* ── Radius: Strictly 2 values enforced across the entire system ───── */
+  --r-sm: 4px;   /* buttons, badges, inputs, small controls */
+  --r-lg: 8px;   /* cards, modals, panels, sidebar */
+
+  /* Compatibility radius aliases */
+  --radius-xs: var(--r-sm);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-lg);
+  --radius-lg: var(--r-lg);
+
+  /* ── Shadows: Single modal shadow token (No card/row/badge glows) ──── */
+  --shadow-modal: 0 16px 40px -8px rgba(0, 0, 0, 0.55);
+  --shadow-subtle: none;
+  --shadow-card: none;
+  --shadow-elevated: var(--shadow-modal);
+
+  /* ── Pulse Durations ───────────────────────────────────────────────── */
+  --pulse-critical: 1.0s;  /* demands attention */
+  --pulse-warning: 1.5s;   /* noticeable, not alarming */
+  --pulse-live: 2.5s;      /* calm heartbeat, ambient */
+
+  /* ── Typography Families ───────────────────────────────────────────── */
+  --font-display: 'Source Serif 4', Georgia, serif;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-data: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ── Backwards-Compatible Legacy Mapping ────────────────────────────── */
+  --bg-canvas: var(--canvas);
+  --bg-surface: var(--surface);
+  --bg-card: var(--surface);
+  --bg-card-hover: var(--surface-raised);
+  --bg-elevated: var(--surface-raised);
+  --bg-input: var(--surface-sunken);
+
+  --border-subtle: var(--border);
+  --border-card: var(--border);
+
+  --accent-primary: var(--accent);
+  --accent-primary-hover: var(--accent-hover);
+  --accent-primary-text: var(--accent-text);
+  --accent-primary-subtle: var(--accent-wash);
+  --accent-primary-border: var(--accent-border);
+
+  --status-critical: var(--critical);
+  --status-critical-bg: var(--critical-bg);
+  --status-critical-border: var(--critical-border);
+
+  --status-high: var(--high);
+  --status-high-bg: var(--high-bg);
+  --status-high-border: var(--high-border);
+
+  --status-medium: var(--medium);
+  --status-medium-bg: var(--medium-bg);
+  --status-medium-border: var(--medium-border);
+
+  --status-low: var(--low);
+  --status-low-bg: var(--low-bg);
+  --status-low-border: var(--low-border);
+
+  --status-live: var(--good);
+  --status-live-bg: var(--good-bg);
+  --status-live-border: var(--good-border);
+
+  --status-neutral: var(--neutral);
+  --status-neutral-bg: var(--neutral-bg);
+  --status-neutral-border: var(--neutral-border);
+
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-muted);
+  --text-muted: var(--ink-muted);
+  --text-faint: var(--ink-faint);
+
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+}
+
+/* ── Reset & Baseline ─────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+/* ── Typography Utilities ─────────────────────────────────────────────── */
+.font-heading,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+.font-mono,
+.font-data {
+  font-family: var(--font-data);
+  font-feature-settings: 'tnum' on, 'zero' on;
+}
+
+.font-sans,
+.font-ui {
+  font-family: var(--font-ui);
+}
+
+/* ── Custom Precision Scrollbars ──────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(244, 241, 235, 0.12);
+  border-radius: var(--r-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 241, 235, 0.22);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Selection ────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(138, 74, 107, 0.35);
+  color: #ffffff;
+}
+
+/* ── Accessible Focus Outline ─────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* ── Structural Cards & Panels ────────────────────────────────────────── */
+.ess-card,
+.enterprise-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  border-radius: var(--r-lg);
+  transition: border-color var(--duration-fast) var(--ease-out-quad),
+              background-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-card-interactive {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  border-radius: var(--r-lg);
+  transition: border-color var(--duration-fast) var(--ease-out-quad),
+              background-color var(--duration-fast) var(--ease-out-quad),
+              transform var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-card-interactive:hover,
+.enterprise-card:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-raised);
+}
+
+.ess-panel,
+.glass-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+/* Floating overlay modals & dropdowns (the ONLY permitted shadow) */
+.ess-modal {
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-modal);
+}
+
+/* ── Hairline Left-Edge Accent Borders ─────────────────────────────────── */
+.ess-edge-critical {
+  border-left: 3px solid var(--critical) !important;
+}
+
+.ess-edge-high {
+  border-left: 3px solid var(--high) !important;
+}
+
+.ess-edge-medium {
+  border-left: 3px solid var(--medium) !important;
+}
+
+.ess-edge-low {
+  border-left: 3px solid var(--low) !important;
+}
+
+.ess-edge-live {
+  border-left: 3px solid var(--good) !important;
+}
+
+.ess-edge-accent,
+.ess-edge-petrol {
+  border-left: 3px solid var(--accent) !important;
+}
+
+/* ── Buttons with Consistent Micro-interaction ────────────────────────── */
+.ess-btn-primary,
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent-border);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out-quad),
+              border-color var(--duration-fast) var(--ease-out-quad),
+              transform var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-btn-primary:hover,
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: rgba(184, 120, 154, 0.5);
+}
+
+.ess-btn-primary:active {
+  transform: translateY(1px);
+}
+
+.ess-btn-secondary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out-quad),
+              border-color var(--duration-fast) var(--ease-out-quad),
+              color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-btn-secondary:hover,
+.btn-secondary:hover {
+  background: var(--surface-raised);
+  border-color: var(--border-hover);
+  color: var(--ink);
+}
+
+.ess-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #a8483b;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(199, 100, 84, 0.35);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-btn-danger:hover {
+  background: #8e392d;
+}
+
+.ess-btn-success {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #4e8262;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(107, 168, 131, 0.35);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-btn-success:hover {
+  background: #3e6e50;
+}
+
+/* ── Form Inputs ──────────────────────────────────────────────────────── */
+.ess-input,
+.glass-input {
+  width: 100%;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  color: var(--ink);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  transition: border-color var(--duration-fast) var(--ease-out-quad),
+              background-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-input:focus,
+.glass-input:focus {
+  background: var(--surface);
+  border-color: var(--accent-text);
+  outline: none;
+}
+
+.ess-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.ess-select {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  color: var(--ink);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-select:focus {
+  border-color: var(--accent-text);
+  outline: none;
+}
+
+/* ── Data Tables ──────────────────────────────────────────────────────── */
+.ess-table,
+.saas-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ess-table th,
+.saas-table th {
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.ess-table td,
+.saas-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  transition: background-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-table tr:hover td,
+.saas-table tr:hover td {
+  background: rgba(244, 241, 235, 0.025);
+  color: var(--ink);
+}
+
+/* ── Functional Badges & Status Chips (Enforced 4px Radius, No Glow) ─── */
+.ess-badge,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  font-family: var(--font-data);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--r-sm);
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: none;
+}
+
+.ess-badge-critical,
+.badge-critical {
+  background: var(--critical-bg);
+  border-color: var(--critical-border);
+  color: var(--critical);
+}
+
+.ess-badge-high,
+.badge-high {
+  background: var(--high-bg);
+  border-color: var(--high-border);
+  color: var(--high);
+}
+
+.ess-badge-medium,
+.badge-medium {
+  background: var(--medium-bg);
+  border-color: var(--medium-border);
+  color: var(--medium);
+}
+
+.ess-badge-low,
+.badge-low {
+  background: var(--low-bg);
+  border-color: var(--low-border);
+  color: var(--low);
+}
+
+.ess-badge-live,
+.badge-good,
+.badge-success {
+  background: var(--good-bg);
+  border-color: var(--good-border);
+  color: var(--good);
+}
+
+.ess-badge-neutral,
+.badge-neutral,
+.badge-indigo {
+  background: var(--neutral-bg);
+  border-color: var(--neutral-border);
+  color: var(--ink-muted);
+}
+
+/* ── Navigation Items ─────────────────────────────────────────────────── */
+.ess-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 11px;
+  border-radius: var(--r-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: background-color var(--duration-fast) var(--ease-out-quad),
+              color var(--duration-fast) var(--ease-out-quad),
+              border-color var(--duration-fast) var(--ease-out-quad);
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+
+.ess-nav-item:hover {
+  background: rgba(244, 241, 235, 0.04);
+  color: var(--ink);
+}
+
+.ess-nav-item.active {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-color: var(--border-strong);
+  font-weight: 600;
+}
+
+/* ── KPI Stat Tile ────────────────────────────────────────────────────── */
+.ess-stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  box-shadow: none;
+  transition: border-color var(--duration-fast) var(--ease-out-quad),
+              background-color var(--duration-fast) var(--ease-out-quad);
+}
+
+.ess-stat-tile:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-raised);
+}
+
+/* ── Motion & Pulse Language (3 Frequencies) ─────────────────────────── */
+
+@keyframes pulseCritical {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.9); }
+}
+
+@keyframes pulseWarning {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.93); }
+}
+
+@keyframes pulseLive {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.95); }
+}
+
+.pulse-critical {
+  animation: pulseCritical var(--pulse-critical) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.pulse-warning {
+  animation: pulseWarning var(--pulse-warning) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.pulse-live,
+.ess-pulse {
+  animation: pulseLive var(--pulse-live) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Accordion expand/collapse transition */
+.ess-accordion-content {
+  animation: essAccordionOpen var(--duration-normal) var(--ease-out-quad) forwards;
+}
+
+@keyframes essAccordionOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Shimmer Loading Skeleton */
+.ess-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(244, 241, 235, 0.03) 25%,
+    rgba(244, 241, 235, 0.07) 50%,
+    rgba(244, 241, 235, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: essShimmer 1.8s ease-in-out infinite;
+  border-radius: var(--r-sm);
+}
+
+@keyframes essShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Loading Spinner */
+.ess-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(244, 241, 235, 0.15);
+  border-top-color: var(--accent-text);
+  border-radius: 50%;
+  animation: essSpin 0.75s linear infinite;
+}
+
+@keyframes essSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Respect Prefers-Reduced-Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniSurv — Single-Feed AI Exam Invigilation Workstation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ==========================================================================
+       DESIGN SYSTEM: HUMAN-CRAFTED SINGLE-CAMERA EXAM PROCTORING CONSOLE
+       Clean, intuitive, high-performance, focused on proctor usability
+       ========================================================================== */
+    :root {
+      --bg-app: #0A0C10;
+      --bg-panel: #11141D;
+      --bg-panel-hover: #161A26;
+      --bg-surface: #151926;
+      --bg-input: #0D1017;
+      
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.14);
+      --border-focus: #3B82F6;
+
+      --accent-blue: #3B82F6;
+      --accent-blue-hover: #2563EB;
+      --accent-blue-subtle: rgba(59, 130, 246, 0.12);
+
+      --text-main: #F3F4F6;
+      --text-muted: #9CA3AF;
+      --text-dim: #6B7280;
+
+      --crit-bg: rgba(239, 68, 68, 0.12);
+      --crit-border: rgba(239, 68, 68, 0.35);
+      --crit-text: #F87171;
+
+      --warn-bg: rgba(245, 158, 11, 0.12);
+      --warn-border: rgba(245, 158, 11, 0.35);
+      --warn-text: #FBBF24;
+
+      --ok-bg: rgba(16, 185, 129, 0.12);
+      --ok-border: rgba(16, 185, 129, 0.35);
+      --ok-text: #34D399;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-pill: 9999px;
+
+      --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.3);
+      --shadow-elevation: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-size: 13px;
+    }
+
+    /* ==========================================================================
+       TOP APP HEADER
+       ========================================================================== */
+    .app-header {
+      height: 54px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      flex-shrink: 0;
+      z-index: 30;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.2px;
+      color: #FFFFFF;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+    }
+
+    .header-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--border-subtle);
+    }
+
+    .exam-tag {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .exam-tag strong {
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .live-pulse {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      background: var(--ok-bg);
+      border: 1px solid var(--ok-border);
+      color: var(--ok-text);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .live-pulse::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Lightweight Rounded Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: #FFFFFF;
+      border-color: #3B82F6;
+    }
+    .btn-primary:hover {
+      background: var(--accent-blue-hover);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      border-color: var(--border-medium);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    .btn-danger {
+      background: var(--crit-bg);
+      color: var(--crit-text);
+      border-color: var(--crit-border);
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.22);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+    }
+
+    .btn-icon-only {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: var(--radius-pill);
+    }
+
+    .timer-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      padding: 5px 12px;
+      border-radius: var(--radius-pill);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .proctor-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px 4px 4px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .proctor-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #3B82F6;
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ==========================================================================
+       MAIN WORKSTATION LAYOUT (70% Camera Feed | 30% Incident Sidebar)
+       ========================================================================== */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 410px;
+      overflow: hidden;
+      background: var(--bg-app);
+    }
+
+    /* --------------------------------------------------------------------------
+       PRIMARY STAGE: SINGLE CAMERA FEED
+       -------------------------------------------------------------------------- */
+    .feed-container {
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      overflow-y: auto;
+      gap: 12px;
+    }
+
+    /* Feed Action / OSD Top Bar */
+    .feed-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 8px 14px;
+    }
+
+    .camera-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .camera-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .camera-specs {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .feed-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Video Viewport */
+    .video-frame {
+      position: relative;
+      background: #080A0F;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      aspect-ratio: 16 / 9.6;
+      box-shadow: var(--shadow-elevation);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .camera-canvas-stage {
+      position: relative;
+      flex: 1;
+      background: radial-gradient(circle at center, #171C28 0%, #080A0F 100%);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: crosshair;
+    }
+
+    /* Realistic classroom desks rendered cleanly with CSS */
+    .exam-room-canvas {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(17, 21, 31, 0.7) 0%, rgba(9, 12, 18, 0.95) 100%),
+        repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255, 255, 255, 0.025) 41px),
+        repeating-linear-gradient(90deg, transparent, transparent 80px, rgba(255, 255, 255, 0.025) 81px);
+    }
+
+    /* Desk arrangement in single camera view */
+    .stage-row {
+      position: absolute;
+      display: flex;
+      justify-content: space-around;
+      width: 90%;
+      left: 5%;
+    }
+    .stage-row.back { bottom: 62%; opacity: 0.6; transform: scale(0.72); }
+    .stage-row.mid { bottom: 38%; opacity: 0.85; transform: scale(0.86); }
+    .stage-row.front { bottom: 12%; }
+
+    .desk-item {
+      width: 170px;
+      height: 80px;
+      background: #1B2130;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .desk-paper {
+      width: 64px;
+      height: 48px;
+      background: #F3F4F6;
+      border-radius: 2px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    .desk-paper::after {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      right: 8px;
+      height: 2px;
+      background: #9CA3AF;
+      box-shadow: 0 8px 0 #9CA3AF, 0 16px 0 #9CA3AF, 0 24px 0 #9CA3AF;
+    }
+
+    .student-avatar-head {
+      position: absolute;
+      top: -26px;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #252D3E;
+      border: 2px solid #4B5563;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Real YOLO Bounding Boxes */
+    .ai-track-box {
+      position: absolute;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .ai-track-box.peeking {
+      border: 2px solid #EF4444;
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    .ai-track-box.attentive {
+      border: 1.5px solid #10B981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .ai-track-box.phone {
+      border: 1.5px solid #F59E0B;
+      background: rgba(245, 158, 11, 0.08);
+    }
+
+    .ai-track-label {
+      position: absolute;
+      top: -24px;
+      left: -2px;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: 3px 3px 0 0;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .ai-track-label.peeking { background: #EF4444; }
+    .ai-track-label.attentive { background: #10B981; }
+    .ai-track-label.phone { background: #F59E0B; color: #000; }
+
+    .gaze-vector-arrow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 80px;
+      height: 2px;
+      background: #EF4444;
+      transform-origin: left center;
+      transform: rotate(38deg);
+    }
+    .gaze-vector-arrow::after {
+      content: '';
+      position: absolute;
+      right: -3px;
+      top: -3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #EF4444;
+    }
+
+    /* Live Camera Bottom OSD Info Bar */
+    .video-bottom-bar {
+      height: 42px;
+      background: var(--bg-panel);
+      border-top: 1px solid var(--border-subtle);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .telemetry-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .telemetry-row strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* Camera Feed Quick Controls Strip */
+    .quick-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Quick Action Banner (Easy-to-use proctor macro bar) */
+    .proctor-banner {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .banner-summary {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .stat-pill strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* --------------------------------------------------------------------------
+       RIGHT SIDEBAR: DEDICATED PROCTORING ACTIVITY & TRIAGE RAIL
+       -------------------------------------------------------------------------- */
+    .sidebar-panel {
+      background: var(--bg-panel);
+      border-left: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-tabs {
+      height: 48px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      padding: 0 12px;
+      background: var(--bg-app);
+      gap: 4px;
+      align-items: center;
+    }
+
+    .side-tab-btn {
+      flex: 1;
+      padding: 6px 10px;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .side-tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .side-tab-btn.active {
+      background: var(--bg-panel);
+      color: #FFFFFF;
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .badge-count {
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--crit-bg);
+      color: var(--crit-text);
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .side-view {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .side-view.active {
+      display: flex;
+    }
+
+    /* Incident Card (Clean & Easy to Take Action) */
+    .incident-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .incident-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .incident-card.highlight {
+      border-color: rgba(239, 68, 68, 0.5);
+      background: rgba(239, 68, 68, 0.04);
+      border-left: 3px solid #EF4444;
+    }
+
+    .incident-card.warning-card {
+      border-color: rgba(245, 158, 11, 0.5);
+      background: rgba(245, 158, 11, 0.04);
+      border-left: 3px solid #F59E0B;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: var(--text-dim);
+    }
+
+    .candidate-chip-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      background: rgba(0, 0, 0, 0.2);
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+    }
+
+    .card-rationale {
+      font-size: 11.5px;
+      color: #D1D5DB;
+      line-height: 1.45;
+    }
+
+    .card-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    /* Candidate Roster List Items */
+    .roster-row {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .roster-row:hover {
+      background: var(--bg-panel-hover);
+    }
+
+    .roster-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .roster-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #1E293B;
+      border: 1px solid var(--border-medium);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #93C5FD;
+    }
+
+    .roster-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .roster-meta {
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+
+    .status-pill-chip {
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+    .status-pill-chip.ok { background: var(--ok-bg); color: var(--ok-text); }
+    .status-pill-chip.danger { background: var(--crit-bg); color: var(--crit-text); }
+    .status-pill-chip.warn { background: var(--warn-bg); color: var(--warn-text); }
+
+    /* Proctor Notes Tab */
+    .notes-box {
+      width: 100%;
+      height: 110px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      color: var(--text-main);
+      font-size: 12px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+    }
+    .notes-box:focus {
+      border-color: var(--accent-blue);
+    }
+
+    /* Modal Styling */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 440px;
+      box-shadow: var(--shadow-elevation);
+      overflow: hidden;
+      animation: modalFade 0.15s ease;
+    }
+
+    @keyframes modalFade {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .modal-title-bar {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-body-content {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .modal-action-bar {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-app);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       HEADER: SINGLE-CAMERA EXAM WORKSTATION
+       ========================================================================== -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-cluster">
+        <div class="brand-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+        <span>OmniSurv</span>
+      </div>
+
+      <div class="header-divider"></div>
+
+      <div class="exam-tag">
+        <span class="live-pulse">LIVE FEED</span>
+        <span>Hall 4B &mdash; <strong>CS301 Machine Learning Exam</strong></span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Session Elapsed Clock -->
+      <div class="timer-badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span id="exam-timer">01:42:15</span>
+        <span style="color: var(--text-dim);">/ 03:00:00</span>
+      </div>
+
+      <button class="btn btn-secondary" onclick="openModal('modal-export')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        <span>Export Report</span>
+      </button>
+
+      <button class="btn btn-danger" onclick="broadcastHallNotice()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span>Hall Warning</span>
+      </button>
+
+      <div class="proctor-chip" onclick="openModal('modal-proctor')">
+        <div class="proctor-avatar">DR</div>
+        <span>Dr. Reed</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       MAIN WORKSPACE
+       ========================================================================== -->
+  <div class="workspace">
+
+    <!-- LEFT STAGE: THE SINGLE CAMERA MONITOR -->
+    <main class="feed-container">
+      
+      <!-- Top OSD Controls Strip -->
+      <div class="feed-top-bar">
+        <div class="camera-meta">
+          <div class="camera-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span>Camera 01: Main Exam Hall (Front View)</span>
+          </div>
+          <span class="camera-specs">1080p &bull; 30 FPS &bull; 4.2 Mbps</span>
+        </div>
+
+        <div class="feed-toolbar">
+          <button class="btn btn-secondary" id="btn-toggle-boxes" onclick="toggleBoundingBoxes()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="15" y1="9" y2="15"/><line x1="15" x2="9" y1="9" y2="15"/></svg>
+            <span id="box-label">AI Overlays: Visible</span>
+          </button>
+          <button class="btn btn-secondary btn-icon-only" title="Capture Snapshot" onclick="captureFeedSnapshot()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+          <button class="btn btn-secondary btn-icon-only" title="Full Screen" onclick="toggleFullscreen()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Video Canvas Stage -->
+      <div class="video-frame" id="camera-viewport">
+        <div class="camera-canvas-stage">
+          <div class="exam-room-canvas"></div>
+
+          <!-- Classroom Desk Layout In Camera Perspective -->
+          <div class="stage-row back">
+            <div class="desk-item"><div class="student-avatar-head"></div><div class="desk-paper"></div></div>
+            <div class="desk-item"><div class="student-avatar-head"></div><div class="desk-paper"></div></div>
+            <div class="desk-item"><div class="student-avatar-head"></div><div class="desk-paper"></div></div>
+          </div>
+
+          <div class="stage-row mid">
+            <div class="desk-item" style="position: relative;">
+              <div class="student-avatar-head"></div>
+              <div class="desk-paper"></div>
+              <!-- Attentive Student Box -->
+              <div class="ai-track-box attentive ai-overlay" style="position: absolute; inset: -14px -8px -8px -8px;">
+                <div class="ai-track-label attentive">#14 Priya Sharma &bull; Attentive</div>
+              </div>
+            </div>
+
+            <div class="desk-item" style="position: relative;">
+              <div class="student-avatar-head"></div>
+              <div class="desk-paper"></div>
+              <div class="ai-track-box attentive ai-overlay" style="position: absolute; inset: -14px -8px -8px -8px;">
+                <div class="ai-track-label attentive">#12 Liam Chen &bull; Attentive</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-row front">
+            <!-- Flagged Cheating Candidate: Marcus Vance -->
+            <div class="desk-item" style="position: relative;">
+              <div class="student-avatar-head" style="transform: rotate(38deg); border-color: #EF4444;"></div>
+              <div class="desk-paper"></div>
+
+              <!-- Real YOLO Overlay for Rubbernecking Peeking -->
+              <div class="ai-track-box peeking ai-overlay" style="position: absolute; inset: -16px -12px -10px -12px;" onclick="focusIncident('INC-1')">
+                <div class="ai-track-label peeking">
+                  <span>#84 Marcus Vance [Desk A2] &bull; Gaze Yaw +42&deg;</span>
+                </div>
+                <div class="gaze-vector-arrow"></div>
+              </div>
+            </div>
+
+            <!-- Neighbor Desk: Elena Rostova -->
+            <div class="desk-item" style="position: relative;">
+              <div class="student-avatar-head"></div>
+              <div class="desk-paper"></div>
+              <div class="ai-track-box attentive ai-overlay" style="position: absolute; inset: -16px -12px -10px -12px;">
+                <div class="ai-track-label attentive">#07 Elena Rostova [Desk A3]</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video Bottom OSD Bar -->
+        <div class="video-bottom-bar">
+          <div class="telemetry-row">
+            <span>Latency: <strong>24 ms</strong></span>
+            <span>Detection Model: <strong>YOLOv8-Pose + ByteTrack</strong></span>
+            <span style="color: #F87171;">Flagged in Frame: <strong>Marcus Vance (Peeking)</strong></span>
+          </div>
+
+          <div class="quick-controls">
+            <button class="btn btn-secondary" onclick="togglePauseStream(this)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <span id="pause-text">Pause Feed</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Proctor Macro Strip -->
+      <div class="proctor-banner">
+        <div class="banner-summary">
+          <div class="stat-pill">
+            <span>Active Candidates in Feed:</span>
+            <strong>18 Students</strong>
+          </div>
+          <div class="stat-pill">
+            <span>Integrity Status:</span>
+            <strong style="color: #FBBF24;">1 Suspicious Event Active</strong>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" onclick="focusIncident('INC-1')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+            <span>Review Active Flag (Desk A2)</span>
+          </button>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- RIGHT RAIL: FOCUSED INCIDENTS & ROSTER -->
+    <aside class="sidebar-panel">
+      
+      <!-- Top Segmented Rail Tabs -->
+      <nav class="sidebar-tabs">
+        <button class="side-tab-btn active" onclick="switchSideTab('incidents', this)">
+          <span>Live Alerts</span>
+          <span class="badge-count" id="active-alert-count">2</span>
+        </button>
+        <button class="side-tab-btn" onclick="switchSideTab('roster', this)">
+          <span>Students in View (18)</span>
+        </button>
+        <button class="side-tab-btn" onclick="switchSideTab('notes', this)">
+          <span>Proctor Notes</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-content">
+
+        <!-- TAB A: LIVE ALERTS -->
+        <div id="side-incidents" class="side-view active">
+          
+          <!-- Incident 1 (Critical) -->
+          <div class="incident-card highlight" id="card-inc-1" onclick="selectIncidentCard('INC-1', 'Marcus Vance', 'Desk A2', 'Rubbernecking Cheating', '10:41:22 AM')">
+            <div class="card-top">
+              <span class="card-title" style="color: #F87171;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                Persistent Peeking Detected
+              </span>
+              <span class="card-time">18s ago</span>
+            </div>
+
+            <div class="candidate-chip-row">
+              <span>Candidate: <strong>Marcus Vance</strong></span>
+              <span style="font-family: 'JetBrains Mono', monospace;">Desk A2</span>
+            </div>
+
+            <p class="card-rationale">
+              Head yaw rotated +42&deg; towards neighboring Desk A3 (Elena Rostova) for 5.1s. Direct line of sight aligned with neighbor test paper.
+            </p>
+
+            <div class="card-actions">
+              <button class="btn btn-danger" style="flex: 1;" onclick="event.stopPropagation(); logViolation('Marcus Vance', 'Desk A2', 'Confirmed Cheating')">
+                Log Violation
+              </button>
+              <button class="btn btn-secondary" onclick="event.stopPropagation(); issueCandidateWarning('Marcus Vance', 'Desk A2')">
+                Warning
+              </button>
+              <button class="btn btn-ghost" onclick="event.stopPropagation(); dismissAlert('card-inc-1')">
+                Dismiss
+              </button>
+            </div>
+          </div>
+
+          <!-- Incident 2 (Warning) -->
+          <div class="incident-card warning-card" id="card-inc-2" onclick="selectIncidentCard('INC-2', 'Sarah Alvarez', 'Desk C4', 'Suspicious Screen Glare', '10:38:05 AM')">
+            <div class="card-top">
+              <span class="card-title" style="color: #FBBF24;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                Suspicious Device Illumination
+              </span>
+              <span class="card-time">3m ago</span>
+            </div>
+
+            <div class="candidate-chip-row">
+              <span>Candidate: <strong>Sarah Alvarez</strong></span>
+              <span style="font-family: 'JetBrains Mono', monospace;">Desk C4</span>
+            </div>
+
+            <p class="card-rationale">
+              Active smartphone display reflection detected beneath desk edge. Downward gaze duration exceeded 8 seconds.
+            </p>
+
+            <div class="card-actions">
+              <button class="btn btn-secondary" style="flex: 1;" onclick="event.stopPropagation(); issueCandidateWarning('Sarah Alvarez', 'Desk C4')">
+                Dispatch Proctor
+              </button>
+              <button class="btn btn-ghost" onclick="event.stopPropagation(); dismissAlert('card-inc-2')">
+                Dismiss
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- TAB B: STUDENTS IN VIEW -->
+        <div id="side-roster" class="side-view">
+          <div class="roster-row" onclick="highlightStudent('Marcus Vance', 'Desk A2')">
+            <div class="roster-user">
+              <div class="roster-avatar" style="border-color: rgba(239, 68, 68, 0.5); color: #F87171;">MV</div>
+              <div>
+                <div class="roster-name">Marcus Vance</div>
+                <div class="roster-meta">Desk A2 &bull; REG-2024004</div>
+              </div>
+            </div>
+            <span class="status-pill-chip danger">Flagged (2x)</span>
+          </div>
+
+          <div class="roster-row" onclick="highlightStudent('Elena Rostova', 'Desk A3')">
+            <div class="roster-user">
+              <div class="roster-avatar">ER</div>
+              <div>
+                <div class="roster-name">Elena Rostova</div>
+                <div class="roster-meta">Desk A3 &bull; REG-2024007</div>
+              </div>
+            </div>
+            <span class="status-pill-chip ok">Attentive</span>
+          </div>
+
+          <div class="roster-row" onclick="highlightStudent('Liam Chen', 'Desk B3')">
+            <div class="roster-user">
+              <div class="roster-avatar">LC</div>
+              <div>
+                <div class="roster-name">Liam Chen</div>
+                <div class="roster-meta">Desk B3 &bull; REG-2024017</div>
+              </div>
+            </div>
+            <span class="status-pill-chip ok">Attentive</span>
+          </div>
+
+          <div class="roster-row" onclick="highlightStudent('Priya Sharma', 'Desk B4')">
+            <div class="roster-user">
+              <div class="roster-avatar">PS</div>
+              <div>
+                <div class="roster-name">Priya Sharma</div>
+                <div class="roster-meta">Desk B4 &bull; REG-2024019</div>
+              </div>
+            </div>
+            <span class="status-pill-chip ok">Attentive</span>
+          </div>
+
+          <div class="roster-row" onclick="highlightStudent('Sarah Alvarez', 'Desk C4')">
+            <div class="roster-user">
+              <div class="roster-avatar" style="border-color: rgba(245, 158, 11, 0.5); color: #FBBF24;">SA</div>
+              <div>
+                <div class="roster-name">Sarah Alvarez</div>
+                <div class="roster-meta">Desk C4 &bull; REG-2024021</div>
+              </div>
+            </div>
+            <span class="status-pill-chip warn">Phone Alert</span>
+          </div>
+        </div>
+
+        <!-- TAB C: PROCTOR NOTES -->
+        <div id="side-notes" class="side-view">
+          <div>
+            <label style="font-size: 11.5px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; display: block;">Quick Invigilator Observation:</label>
+            <textarea class="notes-box" id="quick-note" placeholder="Add an observation note for this session (e.g. Desk A2 paper inspected at 10:45 AM)..."></textarea>
+            <button class="btn btn-primary" style="margin-top: 8px; width: 100%;" onclick="saveProctorNote()">
+              Save Note to Audit Ledger
+            </button>
+          </div>
+
+          <div style="margin-top: 10px; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+            <div style="font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">Saved Session Notes (2)</div>
+            
+            <div style="background: var(--bg-surface); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 8px; font-size: 11.5px;">
+              <div style="color: var(--text-dim); font-size: 10px; margin-bottom: 2px;">10:30 AM &bull; Dr. Allison Reed</div>
+              <div>Exam started smoothly. 18 candidates present in front camera sector.</div>
+            </div>
+
+            <div style="background: var(--bg-surface); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); font-size: 11.5px;">
+              <div style="color: var(--text-dim); font-size: 10px; margin-bottom: 2px;">10:42 AM &bull; Dr. Allison Reed</div>
+              <div>Noticed Marcus Vance looking towards A3. Flagged on AI feed and watching closely.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ==========================================================================
+       MODALS
+       ========================================================================== -->
+  <!-- Export Report Modal -->
+  <div id="modal-export" class="modal-backdrop" onclick="closeModal('modal-export')">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-title-bar">
+        <h3 style="font-size: 13.5px; font-weight: 600;">Export Examination Incident Report</h3>
+        <button class="btn btn-ghost btn-icon-only" onclick="closeModal('modal-export')">&times;</button>
+      </div>
+      <div class="modal-body-content">
+        <p style="font-size: 12px; color: var(--text-muted);">
+          Export an official summary report for Hall 4B including all flagged timestamps, screenshots, and proctor notes.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 11.5px; color: var(--text-muted);">Report Type:</label>
+          <input type="text" value="Certified PDF Report with Incident Snapshots" readonly style="background: var(--bg-input); border: 1px solid var(--border-subtle); padding: 8px 10px; border-radius: var(--radius-sm); color: white; font-size: 12px;">
+        </div>
+      </div>
+      <div class="modal-action-bar">
+        <button class="btn btn-secondary" onclick="closeModal('modal-export')">Cancel</button>
+        <button class="btn btn-primary" onclick="alert('Report generated and downloaded successfully!'); closeModal('modal-export');">Download PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proctor Profile Modal -->
+  <div id="modal-proctor" class="modal-backdrop" onclick="closeModal('modal-proctor')">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-title-bar">
+        <h3 style="font-size: 13.5px; font-weight: 600;">Invigilator Session Details</h3>
+        <button class="btn btn-ghost btn-icon-only" onclick="closeModal('modal-proctor')">&times;</button>
+      </div>
+      <div class="modal-body-content">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+          <span style="color: var(--text-muted);">Invigilator Name</span>
+          <strong>Dr. Allison Reed</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+          <span style="color: var(--text-muted);">Assigned Exam</span>
+          <strong>CS301 Machine Learning</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+          <span style="color: var(--text-muted);">Camera Channel</span>
+          <strong>Camera 01 (Primary Hall Front)</strong>
+        </div>
+      </div>
+      <div class="modal-action-bar">
+        <button class="btn btn-secondary" onclick="closeModal('modal-proctor')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       LIGHTWEIGHT INTERACTION SCRIPT
+       ========================================================================== -->
+  <script>
+    // Tab switching for the right rail
+    function switchSideTab(tabName, btnElem) {
+      document.querySelectorAll('.side-tab-btn').forEach(btn => btn.classList.remove('active'));
+      btnElem.classList.add('active');
+
+      document.querySelectorAll('.side-view').forEach(view => view.classList.remove('active'));
+      document.getElementById('side-' + tabName).classList.add('active');
+    }
+
+    // Toggle bounding boxes visibility on video feed
+    let showOverlays = true;
+    function toggleBoundingBoxes() {
+      showOverlays = !showOverlays;
+      document.querySelectorAll('.ai-overlay').forEach(el => {
+        el.style.display = showOverlays ? 'block' : 'none';
+      });
+      document.getElementById('box-label').innerText = showOverlays ? 'AI Overlays: Visible' : 'AI Overlays: Hidden';
+    }
+
+    // Pause / Resume camera stream simulation
+    let streamPaused = false;
+    function togglePauseStream(btn) {
+      streamPaused = !streamPaused;
+      document.getElementById('pause-text').innerText = streamPaused ? 'Resume Feed' : 'Pause Feed';
+      btn.style.background = streamPaused ? 'rgba(59, 130, 246, 0.2)' : '';
+    }
+
+    // Fullscreen toggle for camera viewport
+    function toggleFullscreen() {
+      const elem = document.getElementById('camera-viewport');
+      if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => alert(`Error entering fullscreen: ${err.message}`));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    // Capture snapshot
+    function captureFeedSnapshot() {
+      alert('Snapshot captured! Saved to session evidence folder as: CAM01_20260911_104215.png');
+    }
+
+    // Broadcast hall warning announcement
+    function broadcastHallNotice() {
+      const notice = prompt('Enter announcement to broadcast on candidate exam hall display:', 'Attention Hall 4B: Please keep eyes focused strictly on your own test papers.');
+      if (notice) {
+        alert('Warning broadcast transmitted to Hall 4B screen.');
+      }
+    }
+
+    // Focus on incident
+    function focusIncident(incId) {
+      switchSideTab('incidents', document.querySelectorAll('.side-tab-btn')[0]);
+      const card = document.getElementById('card-inc-1');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth' });
+        card.style.borderColor = '#3B82F6';
+        setTimeout(() => { card.style.borderColor = ''; }, 1500);
+      }
+    }
+
+    // Log violation
+    function logViolation(name, desk, infraction) {
+      alert(`[OFFICIAL INFRACTION RECORDED]\n\nCandidate: ${name} (${desk})\nViolation: ${infraction}\nTimestamp: ${new Date().toLocaleTimeString()}\n\nPaper marked for post-exam review.`);
+    }
+
+    // Issue candidate warning
+    function issueCandidateWarning(name, desk) {
+      alert(`Warning dispatched to floor proctor: Please quietly approach ${name} at ${desk} and request head posture realignment.`);
+    }
+
+    // Dismiss alert
+    function dismissAlert(cardId) {
+      const card = document.getElementById(cardId);
+      if (card) {
+        card.style.opacity = '0.4';
+        card.style.pointerEvents = 'none';
+        setTimeout(() => { card.style.display = 'none'; }, 200);
+      }
+      let count = parseInt(document.getElementById('active-alert-count').innerText) || 1;
+      count = Math.max(0, count - 1);
+      document.getElementById('active-alert-count').innerText = count;
+    }
+
+    // Highlight student from roster
+    function highlightStudent(name, desk) {
+      alert(`Focusing Camera 01 on ${name} at ${desk}.`);
+    }
+
+    // Save proctor note
+    function saveProctorNote() {
+      const note = document.getElementById('quick-note').value;
+      if (!note) return alert('Please enter an observation note first.');
+      alert('Proctor note logged to audit trail:\n"' + note + '"');
+      document.getElementById('quick-note').value = '';
+    }
+
+    // Modals
+    function openModal(id) {
+      document.getElementById(id).classList.add('show');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+    }
+
+    // ESC key closes modals
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('show'));
+      }
+    });
+
+    // Clock
+    setInterval(() => {
+      const clock = document.getElementById('exam-timer');
+      if (!clock) return;
+      const parts = clock.innerText.split(':');
+      let h = parseInt(parts[0]);
+      let m = parseInt(parts[1]);
+      let s = parseInt(parts[2]) + 1;
+      if (s >= 60) { s = 0; m++; }
+      if (m >= 60) { m = 0; h++; }
+      clock.innerText = `${h < 10 ? '0'+h : h}:${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
+    }, 1000);
+  </script>
+</body>
+</html>

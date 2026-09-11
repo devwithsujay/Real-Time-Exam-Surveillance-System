@@ -1,0 +1,107 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Models
+*.pt
+*.bin
+*.task
+models/*.pt
+models/*.bin
+models/*.task
+backend/models/*.pt
+
+# Agent customizations & local tools
+.agents/
+graphify-out/
+test_output/
+**/test_output/
+.pytest_cache/
+
+# Docker
+docker-compose.override.yml
+
+# Test coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Migrations
+backend/migrations/versions/
+
+# Frontend build
+frontend/build/
+frontend/node_modules/
+node_modules/
+
+# Nginx SSL
+nginx/ssl/*.pem
+nginx/ssl/*.key
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env.local
+.env.production
+
+# IDE specific
+*.iml
+*.ipr
+*.iws
