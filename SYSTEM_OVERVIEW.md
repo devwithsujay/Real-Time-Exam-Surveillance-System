@@ -1,83 +1,106 @@
-# Real-Time Exam Surveillance System — Complete System Overview
+# Real-Time Exam Surveillance System (OmniSurv Enterprise) — Complete System Overview
 
 ## Executive Summary
 
-The Real-Time Exam Surveillance System is an enterprise-grade proctoring command platform that combines YOLOv8 multi-class detection (person + cell phone), MediaPipe high-precision face landmark/gaze tracking, audio decibel capture, and local Vision-Language Model (VLM) reasoning to detect suspicious exam behavior in real-time. Built on FastAPI (backend) + React (frontend) with SQLite/Redis, the system captures video and audio streams, applies multi-layered anomaly detection rules, logs forensic evidence (screenshots, 5-second video clips, and cryptographic audit logs), and streams telemetry and live annotated video to a tactical browser dashboard via authenticated WebSockets. The platform includes full JWT role-based access control (`ADMIN`, `AUDITOR`, `PROCTOR`), a two-person rule approval system for destructive actions, automated participant attendance management, dynamic runtime configuration APIs, and comprehensive forensic PDF dossier generation.
+The Real-Time Exam Surveillance System (OmniSurv Enterprise) is a production-grade autonomous proctoring and surveillance command platform. It combines YOLOv8 multi-class detection (person + cell phone + unauthorized items), MediaPipe 478-point 3D face landmark and eye gaze tracking, microphone decibel audio telemetry, and local Vision-Language Model (VLM) reasoning to detect exam integrity violations in real-time. 
+
+Built on a decoupled architecture with FastAPI (backend) and React 18 (frontend) powered by SQLite/PostgreSQL and Redis, the platform captures multi-stream video and audio, evaluates an 8-rule anomaly detection matrix with anti-spam cooldowns, records forensic evidence (timecoded screenshots, 5-second MP4 video clips, and cryptographic audit logs), and streams low-latency annotated video feeds to a tactical browser dashboard via token-authenticated WebSockets. 
+
+The system features complete JWT role-based access control (`ADMIN`, `AUDITOR`, `PROCTOR`), a two-person rule approval workflow for sensitive actions, automated candidate cohort seeding with dynamic computer vision check-in, runtime threshold configuration APIs, and automated ReportLab PDF forensic compliance dossier generation.
 
 ---
 
 ## 1. File Structure Diagram
 
 ```
-Real Time ESS/
+Real-Time-Exam-Surveillance-System/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py              (empty)
-│   │   ├── main.py                  (~1,640 lines) — FastAPI app, REST endpoints, WebSocket, surveillance pipeline, RBAC
-│   │   ├── config.py                (116 lines)   — Pydantic settings, .env loading, Redis/VLM/Auth configs
-│   │   ├── database.py              (46 lines)    — SQLAlchemy engine, SQLite connection pool, sessions
+│   │   ├── main.py                  (~1,680 lines) — FastAPI app, REST endpoints, WebSocket pipeline, RBAC
+│   │   ├── config.py                (116 lines)   — Pydantic settings, .env loading, threshold defaults
+│   │   ├── database.py              (53 lines)    — SQLAlchemy engine, SQLite auto-init, connection pool, WAL mode
 │   │   ├── models/
-│   │   │   └── __init__.py          (175 lines)   — ORM models: Exam, Participant, Event, User, PendingAction + enums
+│   │   │   └── __init__.py          (175 lines)   — ORM models: Exam, Participant, Event, User, PendingAction
 │   │   ├── schemas/
 │   │   │   └── __init__.py          (305 lines)   — Pydantic request/response schemas (Auth, Config, Events, Exams)
 │   │   ├── crud/
-│   │   │   └── __init__.py          (475 lines)   — Database CRUD operations, analytics, attendance, users, two-man rule
+│   │   │   └── __init__.py          (475 lines)   — Database CRUD operations, analytics, attendance, two-man rule
 │   │   └── services/
-│   │       ├── camera_manager.py    (394 lines)   — Thread-safe webcam capture with queue, normalize, demo fallback
-│   │       ├── detection_engine.py  (304 lines)   — YOLOv8 inference & ByteTrack (person + cell phone detection)
-│   │       ├── tracking_engine.py   (273 lines)   — Kalman filter multi-object tracker (SORT fallback)
-│   │       ├── mediapipe_analyzer.py(239 lines)   — Face landmark detection + 3D gaze & head pose estimation
-│   │       ├── anomaly_detector.py  (672 lines)   — Rule-based anomaly engine (gaze, posture, phone, audio, face obscuring)
+│   │       ├── camera_manager.py    (394 lines)   — Thread-safe camera frame capture queue with demo fallback
+│   │       ├── detection_engine.py  (304 lines)   — YOLOv8 inference & ByteTrack multi-candidate tracking
+│   │       ├── mediapipe_analyzer.py(239 lines)   — 478-point 3D face mesh, gaze vectors & head pose estimation
+│   │       ├── anomaly_detector.py  (672 lines)   — 8-rule heuristic anomaly engine, debouncing, and VLM routing
 │   │       ├── audio_level.py       (120 lines)   — Real-time microphone RMS decibel capture service
-│   │       ├── auth.py              (240 lines)   — JWT authentication, PBKDF2 hashing, RBAC dependencies, WS token auth
-│   │       ├── vlm_client.py        (160 lines)   — Async LM Studio Vision-Language Model client (Qwen2-VL / Moondream)
+│   │       ├── auth.py              (240 lines)   — JWT authentication, PBKDF2 hashing, RBAC dependencies
+│   │       ├── vlm_client.py        (160 lines)   — Async LM Studio Vision-Language Model client (Qwen3-VL / Moondream)
 │   │       ├── report_generator.py  (310 lines)   — ReportLab PDF generation for forensic compliance dossiers
 │   │       ├── redis_client.py      (95 lines)    — Redis caching, pub/sub, rate limiting fail-open client
-│   │       └── event_logger.py      (270 lines)   — Event DB logging + video clip buffer + screenshot capture
-│   ├── data/
-│   │   ├── exam_surveillance.db     (SQLite database)
-│   │   ├── clips/                   (Evidence MP4 video clips)
-│   │   └── screenshots/             (Evidence JPEG screenshots)
-│   ├── models/
-│   │   ├── yolov8n.pt               (YOLOv8 Nano weights, ~6MB)
-│   │   └── face_landmarker.task     (MediaPipe FaceLandmarker model, ~4MB)
-│   └── server.log                   (runtime log output)
+│   │       └── event_logger.py      (270 lines)   — Event DB logging, MP4 video clip synthesis & screenshot capture
+│   ├── rerun_analysis.py            (271 lines)   — Offline VLM batch re-analysis forensic utility
+│   ├── launch.bat                   (35 lines)    — Backend standalone launcher
+│   └── Dockerfile                   (32 lines)    — Backend containerization definition
 ├── frontend/
 │   ├── public/
-│   │   └── index.html               (Modern fonts, styling, meta tags)
+│   │   ├── index.html               (Modern Google Fonts, Inter, JetBrains Mono, meta tags)
+│   │   └── mockup.html              (Static HTML prototype reference)
 │   ├── src/
-│   │   ├── index.js                 (10 lines)    — React entry point
-│   │   ├── App.js                   (520 lines)   — Root component, tactical HUD layout, state, WS/API integration
-│   │   ├── setupProxy.js            (11 lines)    — CRA dev proxy to backend
+│   │   ├── index.js                 (10 lines)    — React DOM root entry point
+│   │   ├── App.js                   (520 lines)   — Root component, Obsidian layout, navigation, WebSocket sync
+│   │   ├── index.css                (650 lines)   — Obsidian design tokens, glass panels, tactical scrollbars
+│   │   ├── setupProxy.js            (11 lines)    — CRA dev proxy routing /api and /ws to port 8000
+│   │   ├── context/
+│   │   │   └── AuthContext.js       (85 lines)    — Global auth state, JWT token storage, user roles
 │   │   ├── services/
-│   │   │   └── api.js               (140 lines)   — Unified API client (Auth, Exams, Roster, Config, PDF/JSON Dossier)
+│   │   │   └── api.js               (140 lines)   — Unified Axios REST API client
 │   │   └── components/
-│   │       ├── ExamMonitor.js       (320 lines)   — Tactical HUD camera feed + live track bounding boxes & confidence
-│   │       ├── AlertPanel.js        (240 lines)   — Threat matrix alert list with severity filters & dismissals
-│   │       ├── AnalyticsBoard.js    (260 lines)   — Real-time telemetry, risk distributions, charts (recharts)
-│   │       ├── EventTimeline.js     (290 lines)   — Forensic audit timeline with human review verification workflow
-│   │       ├── IncidentViewer.js    (360 lines)   — Incident dossier playback, evidence clips & screenshots
-│   │       ├── RosterView.js        (280 lines)   — Real-time exam candidate roster, desk status, batch check-in
+│   │       ├── ExamMonitor.js       (320 lines)   — Tactical camera monitor HUD with live track bounding overlays
+│   │       ├── AlertPanel.js        (240 lines)   — Anomaly threat matrix with severity filtering & VLM reasoning
+│   │       ├── AnalyticsBoard.js    (260 lines)   — Real-time telemetry, risk distributions, Recharts area graphs
+│   │       ├── EventTimeline.js     (290 lines)   — Forensic chronological audit log with human review verification
+│   │       ├── IncidentViewer.js    (360 lines)   — Forensic video player with timecode scrub & keyframe downloads
+│   │       ├── RosterView.js        (280 lines)   — Candidate roster desk, biometric check-in, 1-click batch check-in
 │   │       ├── StaffManagementModal.js (190 lines)— User management & RBAC configuration modal
-│   │       ├── PendingActionsModal.js (170 lines) — Two-person rule dual-authorization verification modal
-│   │       ├── LoginModal.js        (130 lines)   — Tactical authentication modal with demo credentials
-│   │       └── CreateExamModal.js   (110 lines)   — Exam creation form with auto candidate seeding
-│   └── build/                       (production build output)
-├── .env.example                     (184 lines)   — Environment variable reference
-├── .env                             (active config)
-├── pyproject.toml                   (85 lines)    — Python dependencies (Poetry/uv)
-├── frontend/package.json            (37 lines)    — npm dependencies
-└── README.md
+│   │       ├── LoginModal.js        (130 lines)   — Role-based authentication modal with quick test logins
+│   │       └── CreateExamModal.js   (110 lines)   — Exam hall creation form with auto-cohort enrollment
+│   ├── package.json                 (37 lines)    — Frontend npm dependencies
+│   ├── package-lock.json            — Deterministic npm dependency lock
+│   └── Dockerfile                   (25 lines)    — Frontend containerization definition
+├── models/                          — Pre-trained AI weights (Zero-setup tracking)
+│   ├── yolov8n.pt                   (6.5 MB)      — YOLOv8 Nano object & candidate detector
+│   └── face_landmarker.task         (3.7 MB)      — MediaPipe 478-point 3D Face Landmarker
+├── nginx/                           — Reverse proxy & production gateway
+│   ├── nginx.conf                   (45 lines)
+│   └── Dockerfile                   (12 lines)
+├── data/                            — Runtime data directory (Excluded from git, auto-created)
+│   ├── exam_surveillance.db         — SQLite transactional database (auto-initialized)
+│   ├── screenshots/                 — Captured incident evidentiary keyframes
+│   └── clips/                       — Captured 5-second MP4 evidence video clips
+├── archive/                         — Local developer backup (Excluded from git)
+│   ├── agents/                      — Antigravity IDE custom agent skills
+│   ├── test_output/                 — Generated test reports and sample dossiers
+│   ├── graphify-out/                — AST code graph analyzer outputs
+│   └── mockups_and_design_drafts/   — Static prototype mockups and early design notes
+├── requirements.txt                 (30 lines)    — Standard Python package dependencies
+├── pyproject.toml / uv.lock         (85 lines)    — Modern Python project & dependency specifications
+├── start_project.bat                (45 lines)    — 1-click launcher (Python detect, .env setup, dual servers)
+├── stop_project.bat                 (25 lines)    — 1-click service shutdown
+├── run_all.bat                      (15 lines)    — Unified batch runner
+├── test_surveillance_system.py      (1,100 lines) — End-to-end integration and benchmark test suite
+├── SYSTEM_OVERVIEW.md               — Technical architecture and component verification
+├── README.md                        — Enterprise documentation & setup guide
+├── .env.example                     (184 lines)   — Production environment configuration template
+└── .gitignore                       (88 lines)    — Git exclusion rules
 ```
 
-### Line Count Summary
+### Layer Summary
 
-| Layer | Files | Lines |
-|-------|-------|-------|
-| Backend (Python) | 18 | ~5,680 |
-| Frontend (JavaScript) | 14 | ~3,150 |
-| Config/Setup | 4 | ~350 |
-| **Total** | **36** | **~9,180** |
+| Layer | Primary Tech | Tracked Files | Total Code Volume |
+| :--- | :--- | :--- | :--- |
+| **Backend** | Python 3.10+, FastAPI, YOLOv8, MediaPipe, SQLAlchemy | 18 files | ~5,680 lines |
+| **Frontend** | React 18, Tailwind CSS, Lucide, Recharts | 15 files | ~3,200 lines |
+| **Automation & Infrastructure** | Batch, Shell, Nginx, Docker | 8 files | ~250 lines |
+| **Pre-trained AI Models** | YOLOv8n (`.pt`), MediaPipe Landmarker (`.task`) | 2 binary models | ~10.2 MB |
+| **Configuration & Specs** | `pyproject.toml`, `requirements.txt`, `.env.example` | 4 files | ~350 lines |
 
 ---
 
@@ -85,7 +108,7 @@ Real Time ESS/
 
 ```
 ┌──────────────┐     ┌───────────────────┐     ┌──────────────────────┐
-│  Webcam (cv2)│────>│   CameraManager   │────>│     Frame Queue      │
+│  Webcam/RTSP │────>│   CameraManager   │────>│     Frame Queue      │
 └──────────────┘     │   (thread, 30fps) │     │     (buffer=15)      │
                      └───────────────────┘     └──────────┬───────────┘
                                                           │
@@ -98,14 +121,14 @@ Real Time ESS/
 │                          run_pipeline() [asyncio]                           │
 │                                                                             │
 │  ┌─────────────────────────┐         ┌─────────────────────────────────┐    │
-│  │   DetectionEngine       │────────>│ ByteTrack Tracking              │    │
+│  │   DetectionEngine       │────────>│ ByteTrack Spatial Tracking      │    │
 │  │   (YOLOv8 Person+Phone) │         │ (Stable Candidate Track IDs)    │    │
 │  └─────────────────────────┘         └────────────────┬────────────────┘    │
 │                                                       │                     │
 │                                                       v                     │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │ Multi-Layer Per-Track Analysis:                                       │  │
-│  │  1. MediaPipeAnalyzer: 468 face landmarks, iris gaze, head pose       │  │
+│  │  1. MediaPipeAnalyzer: 478 face landmarks, iris gaze, head pose       │  │
 │  │  2. Phone Overlap: Spatial bbox intersection (Person x Cell Phone)    │  │
 │  │  3. LM Studio VLM: Deep visual reasoning on suspicious crops          │  │
 │  │  4. Audio Level: Decibel threshold breaches (> 65 dB)                 │  │
@@ -147,7 +170,6 @@ Real Time ESS/
 │     ├── IncidentViewer (Forensic video player, clipping review)           │
 │     ├── RosterView (Candidate attendance, desk status, batch check-in)    │
 │     ├── StaffManagementModal (User management, RBAC controls)             │
-│     ├── PendingActionsModal (Two-person rule dual authorization)          │
 │     └── Report Export (Direct high-fidelity PDF forensic dossier)         │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
@@ -157,138 +179,85 @@ Real Time ESS/
 ## 3. Component Verification & Current Status
 
 ### A. Real-Time Video Capture & Frame Processing
-
-| Check | Status | Verification Detail |
-|-------|--------|---------------------|
-| Camera source initialized | ✅ VERIFIED | `camera_manager.py:59` initializes `cv2.VideoCapture(self.camera_source)`. |
-| Target FPS configurable | ✅ VERIFIED | Configurable via `CAMERA_FPS` in `.env` (defaults to 30 FPS). |
-| FPS measurement & logging | ✅ VERIFIED | Measured every 30 frames; logged in real-time. |
-| Frame preprocessing | ✅ VERIFIED | Resizes cleanly to target resolution (1280x720) with aspect preservation. |
-| Frame buffering | ✅ VERIFIED | Non-blocking thread queue with max size 15. Discards oldest on saturation to guarantee zero latency. |
-| Demo mode fallback | ✅ VERIFIED | Automatically falls back to synthetic test pattern if camera hardware is detached or occupied. |
-
-**Verdict:** ✅ Fully operational.
+| Capability | Status | Verification Detail |
+| :--- | :--- | :--- |
+| **Camera source initialization** | ✅ VERIFIED | `camera_manager.py` initializes `cv2.VideoCapture(self.camera_source)`. Supports USB, RTSP, and test files. |
+| **Target FPS configurable** | ✅ VERIFIED | Configurable via `CAMERA_FPS` in `.env` (defaults to 30 FPS). |
+| **Frame buffering & latency control** | ✅ VERIFIED | Non-blocking thread queue (buffer size 15). Automatically discards stale frames on saturation to guarantee zero latency. |
+| **Demo mode fallback** | ✅ VERIFIED | Automatically falls back to synthetic video patterns if no physical camera hardware is detected. |
 
 ---
 
-### B. YOLOv8 Multi-Class Object Detection & Tracking
-
-| Check | Status | Verification Detail |
-|-------|--------|---------------------|
-| Model loading | ✅ VERIFIED | `DetectionEngine` loads `yolov8n.pt` with automatic CUDA GPU acceleration or CPU fallback. |
-| Multi-class detection | ✅ VERIFIED | Configured with `target_classes = [0, 67]` detecting both `person` and `cell phone`. |
-| Tracking algorithm | ✅ VERIFIED | ByteTrack persistence (`bytetrack.yaml`) preserves stable candidate track IDs across frames. |
-| Spatial overlap analysis | ✅ VERIFIED | `_bbox_overlap()` in `main.py` detects when a phone is held or placed within candidate bounding box. |
-| Alert generation | ✅ VERIFIED | Generates `PHONE_DETECTED` high-severity alert with candidate track assignment. |
-
-**Verdict:** ✅ Fully operational — previously noted limitation regarding phone detection has been completely resolved.
+### B. YOLOv8 Multi-Class Object Detection & ByteTrack
+| Capability | Status | Verification Detail |
+| :--- | :--- | :--- |
+| **Model loading** | ✅ VERIFIED | `DetectionEngine` loads pre-packaged `models/yolov8n.pt` with automatic CUDA GPU acceleration or CPU fallback. |
+| **Multi-class inference** | ✅ VERIFIED | Configured with `target_classes = [0, 67]` detecting both candidates (`person`) and mobile devices (`cell phone`). |
+| **Spatial tracking persistence** | ✅ VERIFIED | ByteTrack algorithm maintains persistent integer tracking IDs (`TRK #...`) across temporary candidate occlusions. |
+| **Bounding box intersection** | ✅ VERIFIED | `_bbox_overlap()` calculates spatial intersection of candidate torso/desk region with detected contraband. |
 
 ---
 
 ### C. MediaPipe Facial Landmark & Gaze Tracking
-
-| Check | Status | Verification Detail |
-|-------|--------|---------------------|
-| Landmarker model | ✅ VERIFIED | Loads `face_landmarker.task` model (468 3D landmarks + iris blendshapes). |
-| Gaze direction estimation | ✅ VERIFIED | Computes iris deviation vector: classifies `LEFT`, `RIGHT`, `UP`, `DOWN`, `CENTER`. |
-| Head pose estimation | ✅ VERIFIED | Calculates 3D yaw, pitch, and roll angles to detect side-glancing and desk abandonment. |
-| Face obscuring detection | ✅ VERIFIED | Triggers alert when a tracked student's face landmarks disappear for > 3 consecutive seconds. |
-| Multi-face support | ✅ VERIFIED | Analyzes up to 5 simultaneous candidate faces per frame. |
-
-**Verdict:** ✅ Fully operational for facial analysis and gaze tracking.
+| Capability | Status | Verification Detail |
+| :--- | :--- | :--- |
+| **Landmarker model** | ✅ VERIFIED | Loads pre-packaged `models/face_landmarker.task` (478 3D landmarks + iris blendshapes). |
+| **Gaze direction vector** | ✅ VERIFIED | Computes iris deviation vector: classifies `LEFT`, `RIGHT`, `UP`, `DOWN`, `CENTER`. |
+| **3D head pose estimation** | ✅ VERIFIED | Calculates 3D yaw, pitch, and roll angles to detect side-glancing, peering, and desk abandonment. |
+| **Face obscuring detection** | ✅ VERIFIED | Triggers alert when a tracked candidate's face landmarks disappear for > 3 consecutive seconds while their body track remains present. |
 
 ---
 
-### D. Behavior Analysis & 8-Rule Anomaly Engine
-
+### D. 8-Rule Anomaly Detection Engine
 | Rule | Status | Implementation Details |
-|------|--------|------------------------|
+| :--- | :--- | :--- |
 | **Phone Detection** | ✅ OPERATIONAL | Dual-layer: YOLOv8 COCO class 67 bounding box overlap + LM Studio VLM verification. |
 | **Cheat Sheet / Notes** | ✅ OPERATIONAL | Sustained downward gaze deviation combined with VLM visual assessment. |
-| **Unauthorized Communication** | ✅ OPERATIONAL | Extreme head rotation (> 45°) combined with mouth aspect ratio (MAR) movement. |
+| **Unauthorized Communication**| ✅ OPERATIONAL | Extreme head rotation (> 45°) combined with mouth aspect ratio (MAR) movement. |
 | **Sustained Gaze Deviation** | ✅ OPERATIONAL | Continuous gaze off-screen/off-desk exceeding configured frame duration threshold. |
 | **Abnormal Posture** | ✅ OPERATIONAL | Torso and neck bend angle exceeding threshold for extended durations. |
 | **Face Obscured / Absent** | ✅ OPERATIONAL | Candidate track visible but facial landmarker confidence drops to 0 for > 3 seconds. |
 | **Audio Anomaly** | ✅ OPERATIONAL | Real-time `AudioLevelService` monitoring microphone RMS dB against threshold (65 dB). |
 | **Visual Reasoning (VLM)** | ✅ OPERATIONAL | Local LM Studio endpoint (`http://127.0.0.1:1234/v1`) analyzes suspicious frame crops. |
 
-**Verdict:** ✅ All 8 anomaly detection rules are fully functional with configurable temporal smoothing and anti-spam cooldowns.
+---
+
+### E. Candidate Roster & Dynamic Biometric Check-In
+| Capability | Status | Implementation Details |
+| :--- | :--- | :--- |
+| **Automated Cohort Seeding** | ✅ OPERATIONAL | Exam hall creation automatically enrolls candidate records (`REG-2024001` to `REG-2024030`). |
+| **CV Dynamic Check-In** | ✅ OPERATIONAL | Detection engine automatically binds YOLO tracking IDs to enrolled candidate records, marking them `CHECKED_IN` upon entry. |
+| **Proctor Attendance Desk** | ✅ OPERATIONAL | Dedicated `/roster` view with search, filter chips, 1-click check-in/out, and batch **"Mark All Present"** verification. |
+| **Sidebar Telemetry Meter** | ✅ OPERATIONAL | Live verified ratio progress bar (`29/30 Verified · 97%`) displayed globally across the HUD. |
 
 ---
 
-### E. SQLite Event Logging & Evidence Persistence
-
-| Check | Status | Verification Detail |
-|-------|--------|---------------------|
-| Relational schema | ✅ VERIFIED | Tables: `exams`, `participants`, `events`, `users`, `pending_actions` with indexed foreign keys. |
-| Screenshot evidence | ✅ VERIFIED | Full-resolution JPEG evidence snapshot saved to `data/screenshots/` upon every anomaly. |
-| Video clip buffering | ✅ VERIFIED | Rolling 5-second MP4 evidence video clip rendered and saved to `data/clips/`. |
-| Human review workflow | ✅ VERIFIED | Proctors can review events, add notes, and record reviewer credentials via `PUT /api/events/{id}/review`. |
-| Connection pooling | ✅ VERIFIED | Thread-safe `StaticPool` prevents SQLite lock contention. |
-
-**Verdict:** ✅ Fully operational.
+### F. SQLite Event Logging & Forensic Evidence
+| Capability | Status | Implementation Details |
+| :--- | :--- | :--- |
+| **Relational Data Persistence**| ✅ OPERATIONAL | Tables: `exams`, `participants`, `events`, `users`, `pending_actions` with indexed foreign keys. |
+| **Auto-Initialization** | ✅ OPERATIONAL | Database directory `data/` and `exam_surveillance.db` are automatically created on first boot. |
+| **Screenshot Evidence** | ✅ OPERATIONAL | High-resolution evidentiary keyframe snapshots saved to `data/screenshots/`. |
+| **Rolling MP4 Video Clips** | ✅ OPERATIONAL | Rolling 5-second MP4 evidence clips compiled and saved to `data/clips/`. |
+| **ReportLab PDF Dossiers** | ✅ OPERATIONAL | Complete multi-page forensic compliance dossiers generated server-side at `/api/exams/{id}/report?format=pdf`. |
 
 ---
 
-### F. Authentication & Role-Based Access Control (RBAC)
-
-| Feature | Status | Implementation Details |
-|---------|--------|------------------------|
-| **JWT Authentication** | ✅ OPERATIONAL | Cryptographically signed tokens (HS256) issued at `/api/auth/login`. |
-| **Role Hierarchy** | ✅ OPERATIONAL | 3 roles: `ADMIN` (full control), `AUDITOR` (read-only audit), `PROCTOR` (live monitoring & review). |
+### G. Security, RBAC & Two-Person Governance
+| Capability | Status | Implementation Details |
+| :--- | :--- | :--- |
+| **JWT Authentication** | ✅ OPERATIONAL | Signed tokens (HS256) issued at `/api/auth/login`. |
+| **Role Hierarchy** | ✅ OPERATIONAL | 3 roles: `ADMIN` (system & staff control), `AUDITOR` (read-only audit & reports), `PROCTOR` (live monitoring & review). |
 | **Default Seed Accounts** | ✅ OPERATIONAL | Auto-seeds `admin`, `auditor1`, and `proctor1` with PBKDF2 password hashing on startup. |
 | **Two-Person Rule** | ✅ OPERATIONAL | Destructive operations (such as ending an exam or deleting logs) generate a `PendingAction` requiring separate approval. |
 | **WebSocket Security** | ✅ OPERATIONAL | `/ws/exam/{id}?token=<jwt>` validates token validity and proctor permissions before connection upgrade. |
-
-**Verdict:** ✅ Fully operational enterprise security.
-
----
-
-### G. Runtime Configuration API (`GET/PUT /api/config`)
-
-| Feature | Status | Implementation Details |
-|---------|--------|------------------------|
-| **`GET /api/config`** | ✅ OPERATIONAL | Returns active thresholds: `audio_threshold_db`, `gaze_deviation_frames`, `gaze_deviation_angle`, `head_pose_extreme_angle`, `posture_bend_threshold`, `frame_skip_ratio`, `vlm_enabled`. |
-| **`PUT /api/config`** | ✅ OPERATIONAL | Admin-authenticated endpoint that dynamically modifies live thresholds in `Settings` and `AnomalyDetector` in memory without restarting the server. |
-| **Integration** | ✅ OPERATIONAL | Verified via live test queries; changes take effect immediately on subsequent video frames. |
-
-**Verdict:** ✅ Fully operational — previously noted limitation regarding runtime config updates is resolved.
-
----
-
-### H. Forensic Dossier & Reporting
-
-| Feature | Status | Implementation Details |
-|---------|--------|------------------------|
-| **PDF Dossier** | ✅ OPERATIONAL | ReportLab generates formatted PDF compliance dossiers with summary statistics, participant tables, risk scores, and full event logs at `/api/exams/{id}/report?format=pdf`. |
-| **JSON Export** | ✅ OPERATIONAL | Full structured JSON telemetry available at `/api/exams/{id}/report?format=json`. |
-| **Frontend Integration** | ✅ OPERATIONAL | One-click download button in the command header and incident viewer downloads PDF evidence directly. |
-
-**Verdict:** ✅ Fully operational.
-
----
-
-### I. Frontend React Tactical Command Center
-
-| Component | Status | Verification Detail |
-|-----------|--------|---------------------|
-| **Command Header** | ✅ VERIFIED | Live status pills, exam switcher, active user role badge, two-person rule alerts, PDF dossier button. |
-| **Defense HUD (ExamMonitor)**| ✅ VERIFIED | Live video canvas with bounding box overlays, confidence chips, track IDs, and resolution telemetry. |
-| **Threat Matrix (AlertPanel)** | ✅ VERIFIED | Real-time threat feed with severity filters (CRITICAL, HIGH, MEDIUM, LOW) and audio alert toggles. |
-| **Telemetry Analytics** | ✅ VERIFIED | Risk gauges, hourly violation trends, distribution charts (recharts), and active candidate metrics. |
-| **Roster Desk (RosterView)** | ✅ VERIFIED | Full candidate roll call desk, check-in status, desk assignment, risk scores, and batch check-in. |
-| **Audit Timeline** | ✅ VERIFIED | Searchable, paginated event log with human review verification modal and inspector. |
-| **Incident Viewer** | ✅ VERIFIED | Split-screen evidence playback for saved 5-second video clips and high-res screenshots. |
-| **Bug Fixes** | ✅ VERIFIED | Download icon import error fixed, duplicate style props eliminated, WebSocket auto-reconnect active. |
-
-**Verdict:** ✅ Clean build, 0 console errors, premium aesthetic.
 
 ---
 
 ## 4. REST API Endpoint Inventory
 
 | Method | Path | Auth / Role | Purpose |
-|--------|------|-------------|---------|
+| :--- | :--- | :--- | :--- |
 | **POST** | `/api/auth/login` | Public | Authenticate user credentials & receive JWT |
 | **GET** | `/api/auth/me` | Authenticated | Get current user profile and role |
 | **GET** | `/health` | Public | Health status of camera, YOLO, MediaPipe, DB |
@@ -311,64 +280,55 @@ Real Time ESS/
 | **GET** | `/api/events/{id}/clip` | Proctor/Auditor/Admin | Download evidence MP4 video clip |
 | **GET** | `/api/exams/{id}/analytics` | Proctor/Auditor/Admin | Real-time aggregate telemetry & risk stats |
 | **GET** | `/api/exams/{id}/report` | Proctor/Auditor/Admin | Export forensic report (`format=pdf` or `json`) |
-| **GET** | `/api/actions/pending` | Admin | List two-person rule pending approval requests |
-| **POST** | `/api/actions/pending/{id}/approve` | Admin (Second Approver) | Approve or reject pending destructive action |
+| **GET** | `/api/auth/pending-actions` | Admin | List two-person rule pending approval requests |
+| **POST** | `/api/auth/pending-actions/{id}/approve` | Admin (Second Approver) | Approve or reject pending destructive action |
 | **WS** | `/ws/exam/{id}?token=<jwt>` | Authenticated Token | Real-time telemetry, alert, & video streaming |
 
 ---
 
-## 5. Audit of Previously Reported Issues & Resolutions
-
-| Issue Reported in Earlier Version | Previous Severity | Current Status | Resolution |
-|-----------------------------------|-------------------|----------------|------------|
-| **No Authentication / RBAC** | HIGH | ✅ **RESOLVED** | Full JWT auth, PBKDF2 hashing, 3 roles (`ADMIN`, `AUDITOR`, `PROCTOR`), two-person approval rule, WebSocket token verification. |
-| **No Phone / Object Detection** | HIGH | ✅ **RESOLVED** | Added COCO class 67 (`cell phone`) to YOLOv8 inference, spatial bbox intersection analysis, and local VLM visual reasoning. |
-| **Moondream VLM Incompatibility** | MEDIUM | ✅ **RESOLVED** | Implemented `LMStudioVLM` connecting to local OpenAI-compatible endpoint (`http://127.0.0.1:1234/v1`) running vision models. |
-| **No Audio Capture** | MEDIUM | ✅ **RESOLVED** | Added `AudioLevelService` capturing microphone RMS dB in real-time, triggering alerts above threshold. |
-| **No Runtime Config Updates** | LOW | ✅ **RESOLVED** | Added `GET /api/config` and `PUT /api/config` to read and adjust thresholds dynamically in memory. |
-| **Frontend Download Icon ReferenceError** | LOW | ✅ **RESOLVED** | Imported `Download` icon in `App.js`; verified with clean compile. |
-| **Duplicate Style Prop in ExamMonitor** | LOW | ✅ **RESOLVED** | Refactored into clean tactical surveillance canvas HUD. |
-| **WebSocket Reconnect Fragility** | LOW | ✅ **RESOLVED** | Added token preservation, connection state checking, and auto-reconnect handling. |
-| **Missing PDF Report Generation** | MEDIUM | ✅ **RESOLVED** | Implemented ReportLab engine producing multi-page forensic compliance PDF dossiers. |
-| **Attendance / Roster Desynchronization** | MEDIUM | ✅ **RESOLVED** | Dynamic track-to-participant resolution, auto cohort seeding, dedicated Roster Desk UI, and batch check-in. |
-
----
-
-## 6. Deployment & Operation
+## 5. Deployment & Operation
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.10+
 - Node.js 18+
 - Webcam & Microphone
-- Optional: LM Studio with Vision Model (e.g. Qwen2-VL or Moondream) on `http://127.0.0.1:1234`
-- Optional: Redis on `localhost:6379` (system fails open gracefully to memory if absent)
+- *(Optional)* Local Vision Model via LM Studio (`http://127.0.0.1:1234`)
+- *(Optional)* Redis server (gracefully falls back to local memory if absent)
 
-### Backend Startup
-```bash
-cd "Real Time ESS"
-uv run --directory backend uvicorn app.main:app --host 127.0.0.1 --port 8000
+### 1-Click Startup (Windows)
+```cmd
+start_project.bat
 ```
 
-### Frontend Startup
+### Manual CLI Startup
 ```bash
-cd "Real Time ESS/frontend"
+# Terminal 1: Backend
+pip install -r requirements.txt
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Terminal 2: Frontend
+cd frontend
+npm install
 npm start
 ```
 
-### Default Credentials
+### Seeded Staff Credentials
 | Username | Password | Role | Permissions |
-|----------|----------|------|-------------|
+| :--- | :--- | :--- | :--- |
 | `admin` | `Admin@12345` | **ADMIN** | Full system control, threshold tuning, two-person rule approval |
 | `auditor1` | `Auditor@12345` | **AUDITOR** | Read-only access to events, telemetry, and forensic reports |
 | `proctor1` | `Proctor@12345` | **PROCTOR** | Live exam surveillance, candidate check-in, alert review |
 
 ---
 
-## 7. Remaining Roadmap (Future Enhancements)
+## 6. Testing & Quality Assurance
 
-| Priority | Item | Description |
-|----------|------|-------------|
-| **P2** | Multi-Camera RTSP Aggregator | Ingest multiple IP camera streams into a centralized proctoring matrix. |
-| **P2** | Alembic DB Migrations | Formal migration versioning for SQLite/PostgreSQL databases. |
-| **P3** | WebRTC Video Streaming | Ultra-low latency H.264 video streaming over WebRTC as alternative to WebSocket JPEG frames. |
-| **P3** | Audio Speech-to-Text Analysis | Whisper AI transcription for real-time speech content detection. |
+Run the automated integration and benchmark test suite:
+
+```bash
+# Run system integration test suite
+python test_surveillance_system.py --url http://127.0.0.1:8000
+
+# Run frontend build verification
+cd frontend && npm run build
+```
