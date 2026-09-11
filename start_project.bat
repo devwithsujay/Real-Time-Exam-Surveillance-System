@@ -8,12 +8,24 @@ echo          OMNISURV ENTERPRISE - REAL-TIME EXAM SURVEILLANCE
 echo ======================================================================
 echo.
 
+:: Auto-create .env from .env.example if missing on fresh clone
+if not exist "%~dp0.env" (
+    if exist "%~dp0.env.example" (
+        echo [*] Initializing .env from .env.example...
+        copy "%~dp0.env.example" "%~dp0.env" >nul
+    )
+)
+
+:: Auto-create data directory if missing
+if not exist "%~dp0data" (
+    mkdir "%~dp0data" >nul 2>&1
+)
+
 :: Detect Python Environment with all AI & Backend dependencies
-set "VENV_PY=C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe"
-if exist "%VENV_PY%" (
-    set "PY_CMD=%VENV_PY%"
-) else if exist "%~dp0.venv\Scripts\python.exe" (
+if exist "%~dp0.venv\Scripts\python.exe" (
     set "PY_CMD=%~dp0.venv\Scripts\python.exe"
+) else if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe" (
+    set "PY_CMD=C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe"
 ) else (
     set "PY_CMD=python"
 )
