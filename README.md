@@ -7,7 +7,7 @@
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-FaceLandmarker-007FFF.svg)](https://developers.google.com/mediapipe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An enterprise-grade, autonomous exam surveillance and proctoring platform named after **Argus Panoptes** — the all-seeing hundred-eyed giant of Greek mythology. **ARGUS** monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
+An autonomous AI-powered exam surveillance and proctoring platform named after **Argus Panoptes** — the all-seeing hundred-eyed giant of Greek mythology. **ARGUS** monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
 
 ---
 
@@ -30,7 +30,7 @@ An enterprise-grade, autonomous exam surveillance and proctoring platform named 
 - **Global Attendance Telemetry**: Live verified ratio meters (e.g., `29 of 30 Verified · 97%`) visible across the top command bar and workspace tabs.
 
 ### 4. Obsidian Dark Command Center
-- **Enterprise Design System**: Linear/Vercel-inspired dark theme (`#09090b` / `#0f0f12`), frosted glass cards (`.glass-panel`), and custom dark scrollbars.
+- **Obsidian Dark Design**: Linear/Vercel-inspired dark theme (`#09090b` / `#0f0f12`), frosted glass cards (`.glass-panel`), and custom dark scrollbars.
 - **Tactical Camera Monitor HUD**: High-tech feed framing with resolution badges (`LIVE 1080p · 30 FPS`), tactical bounding box overlays (`TRK #...`), and live stream latency pills.
 - **Auditor Video Inspection Desk**: Scrub recorded evidence clips frame-by-frame with custom timecode playback and speed controls.
 
@@ -89,7 +89,7 @@ An enterprise-grade, autonomous exam surveillance and proctoring platform named 
 └──────────────────────────────────────────────────────────────┘
                                ↓
 ┌──────────────────────────────────────────────────────────────┐
-│              ENTERPRISE DASHBOARD & REPORTING                │
+│                  DASHBOARD & REPORTING                       │
 ├──────────────────────────────────────────────────────────────┤
 │  • Tactical Camera Monitor HUD (Real-time binary JPEG stream)│
 │  • Candidate Roster & Attendance Desk (Live check-in/out)    │
@@ -242,9 +242,9 @@ Real-Time-Exam-Surveillance-System/
 ├── frontend/
 │   ├── public/
 │   │   ├── index.html               # Google Fonts, Tailwind config & Obsidian theme
-│   │   └── mockup.html              # Reference enterprise mockup
+│   │   └── mockup.html              # Reference UI mockup
 │   ├── src/
-│   │   ├── App.js                   # Enterprise dashboard shell, nav & WebSocket
+│   │   ├── App.js                   # Main dashboard shell, nav & WebSocket
 │   │   ├── index.css                # Obsidian design tokens, glass panels & scrollbars
 │   │   ├── context/
 │   │   │   └── AuthContext.js       # Authentication state & role checks
@@ -276,17 +276,17 @@ Real-Time-Exam-Surveillance-System/
 ├── run_all.bat                      # Unified test & launch script
 ├── test_surveillance_system.py      # Full test runner & benchmark suite
 ├── SYSTEM_OVERVIEW.md               # Detailed system architecture document
-├── TODO.md                          # Enterprise production scaling roadmap & guides
+├── TODO.md                          # Production scaling roadmap & guides
 ├── .env.example                     # Environment configuration template
 ├── .gitignore                       # Production gitignore rules
-└── README.md                        # Enterprise documentation
+└── README.md                        # Project documentation
 ```
 
 ---
 
-## 🗺️ Enterprise Production Roadmap
+## 🗺️ Production Scaling Roadmap
 
-For engineering teams looking to scale ARGUS from single-room testing to **Fortune-500 campus scale** (500+ simultaneous exam halls, 10,000+ examinees), see the complete technical blueprint and implementation guides in **[TODO.md](TODO.md)**:
+For engineering teams looking to scale ARGUS from single-room testing to high-concurrency campus deployment, see the complete technical blueprint and implementation guides in **[TODO.md](TODO.md)**:
 
 - **Phase 1**: High-Concurrency PostgreSQL Pool & Alembic Database Migrations
 - **Phase 2**: Decoupled AI Inference Worker Pool (Celery + Redis / Ray Serve GPU workers)

@@ -1,6 +1,6 @@
-# ARGUS — Enterprise Production Roadmap & Implementation Guide
+# ARGUS — Production Scaling Roadmap & Implementation Guide
 
-This document outlines the architectural roadmap and concrete step-by-step implementation guides required to transition **ARGUS** from a mid-market testing platform (1–10 concurrent cameras) to a **Hyperscale Fortune-500 Proctoring Infrastructure** (500+ simultaneous exam halls, 10,000+ concurrent students).
+This document outlines the architectural roadmap and concrete step-by-step implementation guides required to scale **ARGUS** from a single-room testing platform (1–10 concurrent cameras) to a **High-Concurrency Multi-Room Campus Infrastructure**.
 
 ---
 
@@ -8,7 +8,7 @@ This document outlines the architectural roadmap and concrete step-by-step imple
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                ARGUS HYPERSCALE ROADMAP                                 │
+│                                ARGUS SCALING ROADMAP                                    │
 ├─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┤
 │     PHASE 1     │     PHASE 2     │     PHASE 3     │     PHASE 4     │     PHASE 5     │
 │   PostgreSQL    │  Decoupled AI   │ WebRTC Video    │ Acoustic AI &   │ Cloud-Native    │
@@ -60,7 +60,7 @@ SQLite works reliably for single-room setups, but locks under high-concurrency w
 
 4. **Update `backend/app/database.py`**:
    ```python
-   # Dynamic support for SQLite in dev, PostgreSQL in enterprise staging/prod
+   # Dynamic support for SQLite in dev, PostgreSQL in production
    if settings.DATABASE_URL.startswith("postgresql"):
        engine = create_engine(
            settings.DATABASE_URL,
@@ -73,7 +73,7 @@ SQLite works reliably for single-room setups, but locks under high-concurrency w
 
 5. **Generate & Run Initial Migration**:
    ```bash
-   alembic revision --autogenerate -m "Initial enterprise schema"
+   alembic revision --autogenerate -m "Initial production schema"
    alembic upgrade head
    ```
 
