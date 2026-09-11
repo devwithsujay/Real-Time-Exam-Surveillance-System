@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12  # 12 hours
     REQUIRE_TWO_PERSON_APPROVAL: bool = False  # False in dev for simplicity, True in strict production
-    API_TITLE: str = "Exam Surveillance System"
+    API_TITLE: str = "ARGUS Exam Surveillance Platform"
     API_VERSION: str = "1.0.0"
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000

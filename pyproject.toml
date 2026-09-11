@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "exam-surveillance"
 version = "1.0.0"
-description = "Real-Time Exam Surveillance System"
+description = "ARGUS — Autonomous AI exam surveillance platform featuring real-time YOLOv8 object tracking, MediaPipe 3D gaze analysis, and automated forensic audit reporting."
 authors = ["Sujay <sujay@example.com>"]
 readme = "README.md"
 packages = [{include = "app", from = "backend"}]
