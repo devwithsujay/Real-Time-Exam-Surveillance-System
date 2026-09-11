@@ -22,10 +22,10 @@ if not exist "%~dp0data" (
 )
 
 :: Detect Python Environment with all AI & Backend dependencies
-if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PY_CMD=%~dp0.venv\Scripts\python.exe"
-) else if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe" (
+if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe" (
     set "PY_CMD=C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe"
+) else if exist "%~dp0.venv\Scripts\python.exe" (
+    set "PY_CMD=%~dp0.venv\Scripts\python.exe"
 ) else (
     set "PY_CMD=python"
 )
