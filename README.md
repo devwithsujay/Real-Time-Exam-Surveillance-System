@@ -147,35 +147,59 @@ An AI-powered, autonomous proctoring and exam surveillance platform that monitor
 ## Quick Start
 
 ### 1. Prerequisites
-- Python 3.10+ (managed via `uv` or standard virtual environment)
+- Python 3.10+ (managed via `pip`, `uv`, or virtual environment)
 - Node.js 18+ and npm
 - USB webcam, RTSP stream, or test video file
 - (Optional) NVIDIA GPU with CUDA for accelerated YOLOv8 and MediaPipe inference
 
-### 2. Backend Setup
-```bash
-# Clone repository
-git clone https://github.com/sujay-dev/exam-surveillance.git
-cd exam-surveillance
+---
 
-# Launch backend with uv
+### 2. 1-Click Automation (Windows)
+
+The repository includes pre-configured automation scripts that auto-detect Python, initialize `.env` from `.env.example`, ensure the local database directory exists, and launch both Backend and Frontend servers simultaneously:
+
+```cmd
+# 1. Clone the repository
+git clone https://github.com/devwithsujay/Real-Time-Exam-Surveillance-System.git
+cd Real-Time-Exam-Surveillance-System
+
+# 2. Install dependencies (First-time setup)
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
+
+# 3. Double-click or run:
+start_project.bat
+```
+* **Frontend Dashboard**: Automatically launches and opens `http://localhost:3000` in your browser.
+* **Backend API Docs**: Running at `http://127.0.0.1:8000/docs`.
+* **To stop all services**: Run `stop_project.bat`.
+
+---
+
+### 3. Manual Step-by-Step Setup
+
+#### Backend Setup
+```bash
+# Using standard pip
+pip install -r requirements.txt
+
+# Or using uv (ultra-fast package manager)
 uv run --directory backend uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 * Backend API documentation: `http://127.0.0.1:8000/docs`
-* Default staff accounts are seeded on first launch (`admin`, `auditor1`, `proctor1` with password `<Role>@12345`).
+* Staff accounts are automatically seeded on first launch:
+  - **Administrator**: `admin` / `Admin@12345`
+  - **Chief Auditor**: `auditor1` / `Auditor@12345`
+  - **Exam Proctor**: `proctor1` / `Proctor@12345`
 
-### 3. Frontend Setup
+#### Frontend Setup
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm start
 ```
 * Dashboard will be live at `http://localhost:3000`
-* Proxy configured to route `/api` and `/ws` to `http://localhost:8000`.
+* Built-in proxy automatically routes `/api` and `/ws` to `http://localhost:8000`.
 
 ---
 
@@ -229,29 +253,32 @@ npm start
 ## Project Structure
 
 ```
-exam-surveillance/
+Real-Time-Exam-Surveillance-System/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                  # FastAPI application, WebSockets & routes
-│   │   ├── config.py                # Environment configuration
-│   │   ├── database.py              # SQLite / PostgreSQL engine & session
+│   │   ├── main.py                  # FastAPI application, WebSockets & REST routes
+│   │   ├── config.py                # Environment configuration & Pydantic settings
+│   │   ├── database.py              # SQLite / PostgreSQL engine & auto-initializer
 │   │   ├── models/                  # SQLAlchemy ORM models (Exam, Participant, Event, User)
 │   │   ├── schemas/                 # Pydantic v2 validation schemas
-│   │   ├── crud/                    # Database operations & attendance logic
+│   │   ├── crud/                    # Database operations & dynamic attendance logic
 │   │   └── services/
 │   │       ├── camera_manager.py     # Multi-threaded camera frame capture
 │   │       ├── detection_engine.py   # YOLOv8 candidate & item inference
 │   │       ├── mediapipe_analyzer.py # Gaze vectors & head pose estimation
-│   │       ├── anomaly_detector.py   # Heuristic rule checks & cooldowns
-│   │       ├── vlm_client.py         # Multimodal reasoning client
+│   │       ├── anomaly_detector.py   # Heuristic rule checks & debouncing
+│   │       ├── vlm_client.py         # Multimodal reasoning client (Qwen3-VL / Moondream)
 │   │       ├── event_logger.py       # Evidence clip & screenshot recorder
 │   │       ├── report_generator.py   # ReportLab PDF dossier compiler
 │   │       ├── audio_level.py        # Real-time microphone dB level monitor
 │   │       └── auth.py               # JWT authentication & RBAC guards
-│   └── tests/                       # Automated unit & integration tests
+│   ├── rerun_analysis.py            # Offline VLM re-analysis utility
+│   ├── launch.bat                   # Backend isolated launcher
+│   └── Dockerfile                   # Backend container definition
 ├── frontend/
 │   ├── public/
-│   │   └── index.html               # Google Fonts, Tailwind config & Obsidian theme
+│   │   ├── index.html               # Google Fonts, Tailwind config & Obsidian theme
+│   │   └── mockup.html              # Reference enterprise mockup
 │   ├── src/
 │   │   ├── App.js                   # Enterprise dashboard shell, nav & WebSocket
 │   │   ├── index.css                # Obsidian design tokens, glass panels & scrollbars
@@ -269,11 +296,25 @@ exam-surveillance/
 │   │       ├── LoginModal.js        # Role-based login with 1-click test roles
 │   │       ├── CreateExamModal.js   # Session hall configuration modal
 │   │       └── StaffManagementModal.js # Staff RBAC directory modal
-│   └── package.json
-├── models/                          # YOLOv8 and MediaPipe model files
+│   ├── package.json                 # Frontend dependencies
+│   ├── package-lock.json            # Deterministic npm tree
+│   └── Dockerfile                   # Frontend container definition
+├── models/                          # Pre-trained AI weights (Zero-setup)
+│   ├── yolov8n.pt                   # YOLOv8 object & candidate detector
+│   └── face_landmarker.task         # MediaPipe 478-point 3D Face Landmarker
+├── nginx/                           # Reverse proxy configuration
+│   ├── nginx.conf
+│   └── Dockerfile
+├── requirements.txt                 # Backend Python package requirements
+├── pyproject.toml / uv.lock         # Project dependencies & modern package lock
+├── start_project.bat                # 1-click launcher (Backend + Frontend + Browser)
+├── stop_project.bat                 # 1-click service shutdown
+├── run_all.bat                      # Unified test & launch script
 ├── test_surveillance_system.py      # Full test runner & benchmark suite
-├── pyproject.toml                   # Project dependencies and tool configurations
-└── README.md
+├── SYSTEM_OVERVIEW.md               # Detailed system architecture document
+├── .env.example                     # Environment configuration template
+├── .gitignore                       # Production gitignore rules
+└── README.md                        # Enterprise documentation
 ```
 
 ---
