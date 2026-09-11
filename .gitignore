@@ -43,8 +43,18 @@ Thumbs.db
 *.log
 logs/
 
-# Raw video recordings (heavy clips)
-data/clips/
+# Archive (local backup of extra mockups, tool outputs, drafts)
+archive/
+.agents/
+graphify-out/
+test_output/
+**/test_output/
+
+# Runtime Data (database, captured evidence images, videos)
+data/
+*.db
+*.sqlite
+*.sqlite3
 *.mp4
 
 # Cache
