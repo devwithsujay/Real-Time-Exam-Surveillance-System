@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Filter, ChevronDown, ChevronUp, Eye, Download,
   User, Search, ArrowUpDown, History, Video, AlertTriangle, Sparkles,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock
 } from 'lucide-react';
 
 function EventTimeline({ events, examId, onViewIncident }) {
@@ -57,10 +57,10 @@ function EventTimeline({ events, examId, onViewIncident }) {
   const paginatedEvents = filteredEvents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const severityBadges = {
-    CRITICAL: 'bg-[#c76454]/12 text-[#c76454] border-[#c76454]/35',
-    HIGH: 'bg-[#c98a52]/12 text-[#c98a52] border-[#c98a52]/35',
-    MEDIUM: 'bg-[#c2ab5c]/12 text-[#c2ab5c] border-[#c2ab5c]/35',
-    LOW: 'bg-[#6b9ab5]/12 text-[#6b9ab5] border-[#6b9ab5]/35'
+    CRITICAL: 'bg-[#ff3b30]/15 text-[#ff3b30]',
+    HIGH: 'bg-[#ff9500]/15 text-[#ff9500]',
+    MEDIUM: 'bg-[#ff9500]/10 text-[#ff9500]',
+    LOW: 'bg-black/5 dark:bg-white/10 text-[#86868b] dark:text-[#a1a1a6]'
   };
 
   const formatTime = (timestamp) => {
@@ -73,59 +73,64 @@ function EventTimeline({ events, examId, onViewIncident }) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-transparent overflow-hidden min-h-0">
-      {/* Search & Filter Bar */}
-      <div className="flex-shrink-0 p-4 sm:p-5 border-b border-[rgba(244,241,235,0.07)] bg-[#1a1719]">
-        <div className="flex items-center gap-2 mb-3">
-          <History className="w-3.5 h-3.5 text-[#b8789a]" />
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#f0ece4] font-heading">
-            Audit Log & Forensic Timeline
-          </h2>
+    <div className="h-full flex flex-col bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] overflow-hidden min-h-0 transition-colors">
+      {/* Apple Header & Filter Toolbar */}
+      <div className="flex-shrink-0 px-6 py-4 border-b border-black/5 dark:border-white/10 bg-[#fbfbfd]/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl z-10">
+        <div className="flex items-center justify-between mb-3.5">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-[#0071e3]" />
+            <h2 className="text-sm font-semibold tracking-tight text-[#1d1d1f] dark:text-white">
+              Activity History & Audit Log
+            </h2>
+          </div>
+          <span className="text-xs text-[#86868b] dark:text-[#a1a1a6]">
+            Showing <strong className="text-[#1d1d1f] dark:text-white">{filteredEvents.length}</strong> events
+          </span>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-2.5">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a89f97] w-3 h-3" />
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Apple Capsule Search Input */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b] w-3.5 h-3.5" />
             <input
               type="text"
-              placeholder="Search audit trail by infraction, student, or keyword..."
+              placeholder="Search history by event, candidate, or keyword..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="w-full pl-8 pr-3 py-1.5 bg-[#0b0a0a] border border-[rgba(244,241,235,0.12)] rounded text-xs text-[#f0ece4] placeholder-[#6b6560] focus:outline-none focus:border-[#b8789a] transition-colors font-sans"
+              className="w-full pl-9 pr-4 py-2 bg-black/[0.04] dark:bg-white/10 border border-transparent hover:border-black/10 dark:hover:border-white/15 focus:border-[#0071e3] focus:bg-white dark:focus:bg-[#2c2c2e] rounded-full text-xs text-[#1d1d1f] dark:text-white placeholder-[#86868b] focus:outline-none focus:ring-4 focus:ring-[#0071e3]/15 transition-all"
             />
           </div>
 
-          {/* Severity filter */}
+          {/* Severity filter pill */}
           <select
             value={filters.severity}
             onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
-            className="px-2.5 py-1.5 bg-[#0b0a0a] border border-[rgba(244,241,235,0.12)] rounded text-xs text-[#f0ece4] focus:outline-none focus:border-[#b8789a] font-sans cursor-pointer hover:border-[rgba(244,241,235,0.22)]"
+            className="px-3.5 py-2 bg-black/[0.04] dark:bg-white/10 hover:bg-black/[0.07] dark:hover:bg-white/15 border border-transparent rounded-full text-xs text-[#1d1d1f] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 cursor-pointer transition-all"
           >
             <option value="all">All Severities</option>
-            <option value="CRITICAL">Critical Severity</option>
-            <option value="HIGH">High Severity</option>
-            <option value="MEDIUM">Medium Severity</option>
-            <option value="LOW">Low Severity</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
           </select>
 
-          {/* Event type filter */}
+          {/* Event type filter pill */}
           <select
             value={filters.eventType}
             onChange={(e) => setFilters({ ...filters, eventType: e.target.value })}
-            className="px-2.5 py-1.5 bg-[#0b0a0a] border border-[rgba(244,241,235,0.12)] rounded text-xs text-[#f0ece4] focus:outline-none focus:border-[#b8789a] font-sans cursor-pointer hover:border-[rgba(244,241,235,0.22)]"
+            className="px-3.5 py-2 bg-black/[0.04] dark:bg-white/10 hover:bg-black/[0.07] dark:hover:bg-white/15 border border-transparent rounded-full text-xs text-[#1d1d1f] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 cursor-pointer transition-all"
           >
-            <option value="all">All Anomaly Models</option>
+            <option value="all">All Event Types</option>
             {eventTypes.map(type => (
               <option key={type} value={type}>{type.replace(/_/g, ' ')}</option>
             ))}
           </select>
 
-          {/* Participant filter */}
+          {/* Participant filter pill */}
           <select
             value={filters.participant}
             onChange={(e) => setFilters({ ...filters, participant: e.target.value })}
-            className="px-2.5 py-1.5 bg-[#0b0a0a] border border-[rgba(244,241,235,0.12)] rounded text-xs text-[#f0ece4] focus:outline-none focus:border-[#b8789a] font-sans cursor-pointer min-w-[150px] hover:border-[rgba(244,241,235,0.22)]"
+            className="px-3.5 py-2 bg-black/[0.04] dark:bg-white/10 hover:bg-black/[0.07] dark:hover:bg-white/15 border border-transparent rounded-full text-xs text-[#1d1d1f] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 cursor-pointer transition-all max-w-[170px] truncate"
           >
             <option value="all">All Candidates</option>
             {Object.entries(participants).map(([id, name]) => (
@@ -133,34 +138,35 @@ function EventTimeline({ events, examId, onViewIncident }) {
             ))}
           </select>
 
-          {/* Sort order */}
+          {/* Sort order pill */}
           <button
             onClick={() => setFilters({ ...filters, sort: filters.sort === 'desc' ? 'asc' : 'desc' })}
-            className="px-2.5 py-1.5 bg-[#0b0a0a] border border-[rgba(244,241,235,0.12)] hover:border-[rgba(244,241,235,0.22)] rounded text-xs text-[#a89f97] hover:text-[#f0ece4] flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 bg-black/[0.04] dark:bg-white/10 hover:bg-black/[0.07] dark:hover:bg-white/15 rounded-full text-xs text-[#1d1d1f] dark:text-white flex items-center gap-1.5 transition-all cursor-pointer"
             title="Toggle sort direction"
           >
-            <ArrowUpDown className="w-3 h-3 text-[#a89f97]" />
-            <span className="font-mono text-[11px]">{filters.sort.toUpperCase()}</span>
+            <ArrowUpDown className="w-3 h-3 text-[#86868b]" />
+            <span className="font-medium text-[11px]">{filters.sort === 'desc' ? 'Newest' : 'Oldest'}</span>
           </button>
-        </div>
-
-        <div className="flex items-center justify-between text-xs font-mono text-[#a89f97]">
-          <div className="flex items-center gap-2">
-            <span><strong className="text-[#f0ece4]">{filteredEvents.length}</strong> logged events</span>
-            <span className="text-[#6b6560]">•</span>
-            <span>Page <strong className="text-[#f0ece4]">{currentPage}</strong> of {totalPages || 1}</span>
-          </div>
         </div>
       </div>
 
+      {/* Table Header Row */}
+      <div className="px-6 py-2.5 bg-[#fbfbfd]/50 dark:bg-[#1c1c1e]/50 border-b border-black/5 dark:border-white/5 flex items-center gap-4 text-[11px] font-medium text-[#86868b] dark:text-[#a1a1a6] select-none">
+        <div className="min-w-[140px]">Time & Severity</div>
+        <div className="flex-1 min-w-0">Activity & Context</div>
+        <div className="min-w-[80px] text-right">Confidence</div>
+      </div>
+
       {/* Events List */}
-      <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-[rgba(244,241,235,0.06)]">
+      <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-black/5 dark:divide-white/5 bg-white dark:bg-[#1c1c1e]">
         {filteredEvents.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[#6b6560] p-8">
-            <div className="text-center max-w-sm ess-card p-6">
-              <Filter className="w-8 h-8 mx-auto mb-2 text-[#6b6560]" />
-              <p className="text-sm font-semibold text-[#f0ece4] font-heading">No events matched filters</p>
-              <p className="text-xs text-[#a89f97] mt-1 font-sans">Adjust search parameters or severity thresholds to view logs.</p>
+          <div className="flex items-center justify-center h-full p-8">
+            <div className="text-center max-w-sm rounded-3xl bg-[#f5f5f7] dark:bg-[#2c2c2e] p-8 text-[#86868b] dark:text-[#a1a1a6]">
+              <Filter className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm font-semibold text-[#1d1d1f] dark:text-white">No Matching Events</p>
+              <p className="text-xs text-[#86868b] dark:text-[#a1a1a6] mt-1">
+                Try adjusting your search query or severity filter.
+              </p>
             </div>
           </div>
         ) : (
@@ -180,17 +186,15 @@ function EventTimeline({ events, examId, onViewIncident }) {
         )}
       </div>
 
-      {/* Bottom Pagination Dock */}
+      {/* Apple Table Pagination Dock */}
       {filteredEvents.length > 0 && (
-        <div className="flex-shrink-0 px-4 sm:px-5 py-2.5 border-t border-[rgba(244,241,235,0.07)] bg-[#1a1719] flex flex-col sm:flex-row items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2 text-xs font-mono text-[#a89f97]">
-            <span>
-              Showing <strong className="text-[#f0ece4]">{Math.min(filteredEvents.length, (currentPage - 1) * itemsPerPage + 1)}</strong>–<strong className="text-[#f0ece4]">{Math.min(filteredEvents.length, currentPage * itemsPerPage)}</strong> of <strong className="text-[#b8789a]">{filteredEvents.length}</strong> events
-            </span>
+        <div className="flex-shrink-0 px-6 py-3.5 border-t border-black/5 dark:border-white/5 bg-[#fbfbfd]/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="text-[#86868b] dark:text-[#a1a1a6] font-medium">
+            Showing <span className="font-semibold text-[#1d1d1f] dark:text-white">{Math.min(filteredEvents.length, (currentPage - 1) * itemsPerPage + 1)}</span>–<span className="font-semibold text-[#1d1d1f] dark:text-white">{Math.min(filteredEvents.length, currentPage * itemsPerPage)}</span> of <span className="font-semibold text-[#0071e3]">{filteredEvents.length}</span> events
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-xs text-[#a89f97] font-mono">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-[#86868b] dark:text-[#a1a1a6]">
               <span>Show:</span>
               <select
                 value={itemsPerPage}
@@ -198,7 +202,7 @@ function EventTimeline({ events, examId, onViewIncident }) {
                   setItemsPerPage(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="bg-[#0b0a0a] border border-[rgba(244,241,235,0.12)] text-[#f0ece4] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-[#b8789a] cursor-pointer"
+                className="bg-black/5 dark:bg-white/10 border border-transparent hover:border-black/10 dark:hover:border-white/20 text-[#1d1d1f] dark:text-white rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 cursor-pointer transition-all"
               >
                 <option value={5}>5 / page</option>
                 <option value={10}>10 / page</option>
@@ -207,11 +211,11 @@ function EventTimeline({ events, examId, onViewIncident }) {
               </select>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setCurrentPage(1)}
                 disabled={currentPage === 1}
-                className="p-1 rounded bg-[#221e20] hover:bg-[#2a2528] text-[#a89f97] hover:text-[#f0ece4] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
                 title="First Page"
               >
                 <ChevronsLeft size={13} />
@@ -219,18 +223,18 @@ function EventTimeline({ events, examId, onViewIncident }) {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1 rounded bg-[#221e20] hover:bg-[#2a2528] text-[#a89f97] hover:text-[#f0ece4] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
                 title="Previous Page"
               >
                 <ChevronLeft size={13} />
               </button>
-              <span className="px-2 text-xs font-mono text-[#f0ece4]">
-                {currentPage} / {totalPages || 1}
+              <span className="px-2.5 text-xs font-medium text-[#1d1d1f] dark:text-white">
+                {currentPage} of {totalPages || 1}
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-1 rounded bg-[#221e20] hover:bg-[#2a2528] text-[#a89f97] hover:text-[#f0ece4] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
                 title="Next Page"
               >
                 <ChevronRight size={13} />
@@ -238,7 +242,7 @@ function EventTimeline({ events, examId, onViewIncident }) {
               <button
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={currentPage === totalPages}
-                className="p-1 rounded bg-[#221e20] hover:bg-[#2a2528] text-[#a89f97] hover:text-[#f0ece4] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
                 title="Last Page"
               >
                 <ChevronsRight size={13} />
@@ -255,34 +259,39 @@ function EventRow({ event, index, participantName, severityBadges, formatTime, i
   const badgeClass = severityBadges[event.severity] || severityBadges.LOW;
 
   return (
-    <div className={`transition-colors duration-100 ${isExpanded ? 'bg-[#221e20]' : 'hover:bg-[#1a1719]'}`}>
+    <div className={`transition-colors duration-150 ${isExpanded ? 'bg-black/[0.02] dark:bg-white/[0.04]' : 'hover:bg-black/[0.015] dark:hover:bg-white/[0.02]'}`}>
       {/* Main Row */}
-      <div className="px-4 sm:px-5 py-3 flex items-center gap-3 cursor-pointer" onClick={onToggle}>
-        <div className="flex items-center gap-2 min-w-[120px]">
-          <span className={`px-2 py-0.5 text-[9px] font-mono font-semibold rounded border uppercase ${badgeClass}`}>
+      <div className="px-6 py-3.5 flex items-center gap-4 cursor-pointer" onClick={onToggle}>
+        <div className="flex items-center gap-2.5 min-w-[140px]">
+          <span className={`px-2.5 py-0.5 text-[10px] font-medium rounded-full ${badgeClass}`}>
             {event.severity}
           </span>
-          <span className="text-[11px] text-[#a89f97] font-mono">{formatTime(event.timestamp)}</span>
+          <span className="text-xs text-[#86868b] dark:text-[#a1a1a6] flex items-center gap-1">
+            <Clock size={11} />
+            {formatTime(event.timestamp)}
+          </span>
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-semibold text-[#f0ece4] truncate font-sans">{event.event_type.replace(/_/g, ' ')}</span>
+            <span className="font-semibold text-[#1d1d1f] dark:text-white truncate">{event.event_type.replace(/_/g, ' ')}</span>
             {participantName && (
-              <span className="flex items-center gap-1 text-[#f0ece4] bg-[#221e20] px-1.5 py-px rounded border border-[rgba(244,241,235,0.07)] text-[11px]">
-                <User size={10} className="text-[#b8789a]" />
-                <span className="truncate max-w-[130px] font-medium">{participantName}</span>
+              <span className="flex items-center gap-1 text-[#1d1d1f] dark:text-white bg-black/5 dark:bg-white/10 px-2.5 py-0.5 rounded-full text-[11px] font-medium">
+                <User size={10} className="text-[#0071e3]" />
+                <span className="truncate max-w-[130px]">{participantName}</span>
               </span>
             )}
             {event.track_id && (
-              <span className="text-[#a89f97] font-mono text-[10px] bg-[#221e20] px-1.5 py-px rounded border border-[rgba(244,241,235,0.07)]">#TRK-{event.track_id}</span>
+              <span className="text-[#86868b] text-[10px] bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">
+                Track #{event.track_id}
+              </span>
             )}
           </div>
-          <p className="text-[11px] text-[#a89f97] truncate mt-0.5 font-sans">{event.description}</p>
+          <p className="text-xs text-[#86868b] dark:text-[#a1a1a6] truncate mt-0.5">{event.description}</p>
         </div>
 
-        <div className="flex items-center gap-2.5 text-[#a89f97]">
-          <span className="text-[11px] font-mono text-[#a89f97]">
+        <div className="flex items-center gap-3 text-[#86868b] dark:text-[#a1a1a6]">
+          <span className="text-xs font-medium text-[#1d1d1f] dark:text-white">
             {event.confidence ? `${(event.confidence * 100).toFixed(0)}%` : '--'}
           </span>
 
@@ -292,8 +301,8 @@ function EventRow({ event, index, participantName, severityBadges, formatTime, i
                 e.stopPropagation();
                 if (onViewIncident) onViewIncident(event.event_id);
               }}
-              className="p-1 text-[#b8789a] hover:text-[#f0ece4] hover:bg-[#8a4a6b]/20 rounded transition-colors"
-              title="Inspect Forensic Clip in Incident Desk"
+              className="p-1.5 text-[#0071e3] hover:bg-[#0071e3]/10 rounded-full transition-colors cursor-pointer"
+              title="Inspect in Incident Viewer"
             >
               <Eye className="w-3.5 h-3.5" />
             </button>
@@ -301,38 +310,38 @@ function EventRow({ event, index, participantName, severityBadges, formatTime, i
 
           <button
             onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            className="p-1 text-[#a89f97] hover:text-[#f0ece4] transition-colors"
+            className="p-1.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors cursor-pointer"
           >
-            {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-[#f0ece4]" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>
 
-      {/* Expanded Details with Accordion Animation */}
+      {/* Expanded Details */}
       {isExpanded && (
-        <div className="px-5 py-4 border-t border-[rgba(244,241,235,0.07)] bg-[#1a1719] ess-accordion-content">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Left Side: Video Evidence Player */}
-            <div className="lg:col-span-7 flex flex-col space-y-2">
+        <div className="px-6 py-5 border-t border-black/5 dark:border-white/5 bg-[#fbfbfd]/70 dark:bg-[#1c1c1e]/70 backdrop-blur-md">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Side: Video Evidence */}
+            <div className="lg:col-span-7 flex flex-col space-y-2.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-[#f0ece4] flex items-center gap-1.5 font-heading text-xs">
-                  <Video size={13} className="text-[#b8789a]" />
-                  <span>Synchronized Video Evidence</span>
+                <span className="font-semibold text-[#1d1d1f] dark:text-white flex items-center gap-1.5">
+                  <Video size={13} className="text-[#0071e3]" />
+                  <span>Synchronized Video Capture</span>
                 </span>
                 {event.evidence_clip_path && (
                   <a
                     href={`/api/events/${event.event_id}/clip?download=true`}
                     download
-                    className="text-[11px] text-[#b8789a] hover:text-[#f0ece4] font-mono flex items-center gap-1"
+                    className="text-xs text-[#0071e3] hover:underline flex items-center gap-1 font-medium"
                   >
-                    <Download size={11} />
+                    <Download size={12} />
                     <span>Download MP4</span>
                   </a>
                 )}
               </div>
 
               {event.evidence_clip_path ? (
-                <div className="rounded overflow-hidden border border-[rgba(244,241,235,0.08)] bg-[#0b0a0a] aspect-video flex items-center justify-center shadow-sm relative group">
+                <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-black aspect-video flex items-center justify-center shadow-lg relative group">
                   <video
                     controls
                     autoPlay={false}
@@ -342,7 +351,7 @@ function EventRow({ event, index, participantName, severityBadges, formatTime, i
                   />
                 </div>
               ) : event.evidence_screenshot_path ? (
-                <div className="rounded overflow-hidden border border-[rgba(244,241,235,0.08)] bg-[#0b0a0a] aspect-video flex items-center justify-center shadow-sm">
+                <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-black aspect-video flex items-center justify-center shadow-lg">
                   <img
                     src={`/api/events/${event.event_id}/screenshot`}
                     alt="Evidentiary Keyframe Capture"
@@ -350,80 +359,80 @@ function EventRow({ event, index, participantName, severityBadges, formatTime, i
                   />
                 </div>
               ) : (
-                <div className="rounded border border-[rgba(244,241,235,0.07)] bg-[#1a1719] aspect-video flex flex-col items-center justify-center text-[#6b6560]">
-                  <Video size={24} className="text-[#6b6560] mb-1.5" />
-                  <span className="text-xs font-mono">No video clip captured for this event</span>
+                <div className="rounded-2xl border border-dashed border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 aspect-video flex flex-col items-center justify-center text-[#86868b]">
+                  <Video size={24} className="mb-2 opacity-50" />
+                  <span className="text-xs">No media clip recorded for this event</span>
                 </div>
               )}
 
               {event.evidence_clip_path && event.evidence_screenshot_path && (
-                <details className="mt-1 bg-[#1a1719] border border-[rgba(244,241,235,0.07)] rounded p-2">
-                  <summary className="text-[11px] font-mono text-[#b8789a] hover:text-[#f0ece4] cursor-pointer flex items-center justify-between">
+                <details className="mt-1 bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/10 rounded-xl p-2.5">
+                  <summary className="text-xs text-[#0071e3] hover:underline cursor-pointer flex items-center justify-between font-medium">
                     <span className="flex items-center gap-1.5">
                       <Eye size={12} />
-                      <span>View High-Resolution Evidentiary Keyframe</span>
+                      <span>View Keyframe Photo</span>
                     </span>
-                    <span className="text-[10px] text-[#6b6560] font-mono">Toggle Keyframe</span>
+                    <span className="text-[11px] text-[#86868b]">Toggle image</span>
                   </summary>
-                  <div className="mt-2 rounded overflow-hidden border border-[rgba(244,241,235,0.08)] bg-[#0b0a0a] p-1 flex justify-center">
+                  <div className="mt-2 rounded-xl overflow-hidden bg-black p-1 flex justify-center">
                     <img
                       src={`/api/events/${event.event_id}/screenshot`}
                       alt="High-Res Keyframe"
-                      className="max-h-64 object-contain rounded"
+                      className="max-h-64 object-contain rounded-lg"
                     />
                   </div>
                 </details>
               )}
             </div>
 
-            {/* Right Side: Infraction Rationale & Synthesis */}
-            <div className="lg:col-span-5 flex flex-col space-y-2.5">
+            {/* Right Side: Behavioral Assessment & Telemetry */}
+            <div className="lg:col-span-5 flex flex-col space-y-3">
               {/* Infraction Rationale */}
-              <div className="ess-card p-3 border-l-[3px] border-l-[#c2ab5c] bg-[#1e1b17]">
+              <div className="bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/10 rounded-2xl p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold font-heading text-[#c2ab5c] flex items-center gap-1">
-                    <AlertTriangle size={12} className="text-[#c2ab5c]" />
-                    <span>Infraction Rationale</span>
+                  <span className="text-xs font-semibold text-[#ff9500] flex items-center gap-1.5">
+                    <AlertTriangle size={13} />
+                    <span>Behavior Assessment</span>
                   </span>
-                  <span className="text-xs font-mono font-semibold text-[#f0ece4]">
+                  <span className="text-xs font-semibold text-[#1d1d1f] dark:text-white">
                     {event.confidence ? `${(event.confidence * 100).toFixed(0)}% Confidence` : ''}
                   </span>
                 </div>
-                <p className="text-xs text-[#f0ece4] leading-relaxed font-sans">
+                <p className="text-xs text-[#1d1d1f] dark:text-[#f5f5f7] leading-relaxed">
                   {event.description || 'Proctoring heuristic threshold exceeded.'}
                 </p>
               </div>
 
-              {/* Multimodal VLM Reasoning */}
+              {/* Apple Intelligence / VLM Reasoning */}
               {(event.analysis_data?.vlm_reasoning || event.analysis_data?.vlm_response) && (
-                <div className="ess-card p-3 border-[rgba(138,74,107,0.35)] bg-[#1e171b]">
-                  <div className="flex items-center gap-1 text-[10px] font-semibold font-heading text-[#b8789a] mb-1.5">
-                    <Sparkles size={12} className="text-[#b8789a]" />
-                    <span>Vision-Language Model Reasoning</span>
+                <div className="bg-gradient-to-b from-[#0071e3]/10 to-transparent border border-[#0071e3]/20 rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center gap-1.5 text-xs text-[#0071e3] font-semibold mb-1.5">
+                    <Sparkles size={13} />
+                    <span>AI Reasoning Synthesis</span>
                   </div>
-                  <p className="text-[11px] text-[#f0ece4] leading-relaxed whitespace-pre-wrap font-sans">
+                  <p className="text-xs text-[#1d1d1f] dark:text-[#f5f5f7] leading-relaxed whitespace-pre-wrap">
                     {event.analysis_data.vlm_reasoning || event.analysis_data.vlm_response}
                   </p>
                 </div>
               )}
 
-              {/* Event Metadata Dossier */}
-              <div className="ess-card p-3 space-y-1.5 text-xs font-mono">
-                <DetailRow label="Anomaly Model" value={event.event_type.replace(/_/g, ' ')} />
+              {/* Event Metadata */}
+              <div className="bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/10 rounded-2xl p-4 space-y-2 text-xs shadow-sm">
+                <DetailRow label="Pattern Type" value={event.event_type.replace(/_/g, ' ')} />
                 <DetailRow label="Severity" value={event.severity} />
                 <DetailRow label="Timestamp" value={new Date(event.timestamp).toLocaleString()} />
-                <DetailRow label="Sensor" value={`CAM-${event.camera_id ?? 0}`} />
-                <DetailRow label="CV Track ID" value={event.track_id ? `#TRK-${event.track_id}` : 'N/A'} />
+                <DetailRow label="Sensor Unit" value={`Camera ${event.camera_id ?? 0}`} />
+                <DetailRow label="Track ID" value={event.track_id ? `#TRK-${event.track_id}` : 'N/A'} />
                 {participantName && <DetailRow label="Candidate" value={participantName} />}
-                <DetailRow label="Event ID" value={event.event_id} />
+                <DetailRow label="Event Identifier" value={event.event_id} />
               </div>
 
               {event.analysis_data && (
-                <details className="bg-[#1a1719] border border-[rgba(244,241,235,0.07)] rounded p-2.5">
-                  <summary className="text-[11px] font-sans text-[#a89f97] cursor-pointer font-medium hover:text-[#f0ece4]">
-                    Machine Telemetry JSON
+                <details className="bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/10 rounded-2xl p-3">
+                  <summary className="text-xs text-[#86868b] dark:text-[#a1a1a6] cursor-pointer font-medium hover:text-[#1d1d1f] dark:hover:text-white">
+                    Raw Machine Telemetry
                   </summary>
-                  <pre className="mt-1.5 text-[10px] font-mono text-[#f0ece4] overflow-auto max-h-32">
+                  <pre className="mt-2 text-[11px] font-mono text-[#1d1d1f] dark:text-[#f5f5f7] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl p-3 overflow-auto max-h-32">
                     {JSON.stringify(event.analysis_data, null, 2)}
                   </pre>
                 </details>
@@ -438,9 +447,9 @@ function EventRow({ event, index, participantName, severityBadges, formatTime, i
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex items-start gap-2 text-[11px]">
-      <span className="text-[#a89f97] w-32 shrink-0 font-sans">{label}:</span>
-      <span className="text-[#f0ece4] font-medium truncate font-mono">{value}</span>
+    <div className="flex items-center justify-between text-xs py-1 border-b border-black/[0.03] dark:border-white/[0.05] last:border-0">
+      <span className="text-[#86868b] dark:text-[#a1a1a6]">{label}</span>
+      <span className="font-medium text-[#1d1d1f] dark:text-white truncate max-w-[180px]">{value}</span>
     </div>
   );
 }

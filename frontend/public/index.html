@@ -1,18 +1,18 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#121011" />
-    <meta name="description" content="ARGUS — Autonomous Real-Time Exam Surveillance & Forensic Invigilation Console" />
-    <title>ARGUS — Institutional Exam Integrity Ledger</title>
+    <meta name="theme-color" content="#0f1a30" />
+    <meta name="description" content="ARGUS — Examination Vigilance System" />
+    <title>ARGUS — Examination Vigilance System</title>
     
-    <!-- Google Fonts: Source Serif 4 (Display/Headings), Inter (UI Chrome), JetBrains Mono (Telemetry) with font-display: swap -->
+    <!-- Google Fonts: Space Grotesk 700 (Brand/Wordmark only), Inter (UI Chrome), JetBrains Mono (Telemetry/Data) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet" />
 
-    <!-- Tailwind CDN with ARGUS v2 Palette Extension -->
+    <!-- Tailwind CDN configured with ARGUS institutional vigilance design system -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -20,47 +20,69 @@
         theme: {
           extend: {
             fontFamily: {
-              heading: ['"Source Serif 4"', 'Georgia', 'serif'],
-              display: ['"Source Serif 4"', 'Georgia', 'serif'],
-              sans: ['Inter', 'system-ui', 'sans-serif'],
-              mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+              brand: ['"Space Grotesk"', 'sans-serif'],
+              sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
             },
             colors: {
-              canvas: '#121011',
-              surface: '#1a1719',
-              'surface-raised': '#221e20',
-              'surface-sunken': '#0b0a0a',
-              card: '#1a1719',
-              'card-hover': '#221e20',
-              elevated: '#221e20',
-              border: 'rgba(244, 241, 235, 0.07)',
-              'border-strong': 'rgba(244, 241, 235, 0.14)',
-              hairline: 'rgba(244, 241, 235, 0.07)',
-              'hairline-strong': 'rgba(244, 241, 235, 0.14)',
-              accent: {
-                DEFAULT: '#8a4a6b',
-                hover: '#9b5579',
-                text: '#b8789a',
-                wash: 'rgba(138, 74, 107, 0.12)',
-                border: 'rgba(138, 74, 107, 0.35)',
+              navy: {
+                DEFAULT: '#0f1a30',
+                2: '#1a2c4e',
+                3: '#1b2a4a',
+                hairline: '#26395c',
+                panel: '#111a30',
+                'panel-border': '#1c2742',
               },
-              critical: '#c76454',
-              high: '#c98a52',
-              medium: '#c2ab5c',
-              low: '#6b9ab5',
-              good: '#6ba883',
+              canvas: '#eef0f4',
+              card: '#ffffff',
+              border: {
+                DEFAULT: '#e0e4ea',
+                strong: '#cfd6e0',
+                hairline: '#26395c',
+              },
+              ink: {
+                DEFAULT: '#17233a',
+                muted: '#5d6b82',
+                faint: '#8b95a8',
+              },
+              accent: {
+                DEFAULT: '#2f5fb3',
+                hover: '#244d96',
+                light: 'rgba(47, 95, 179, 0.08)',
+                border: 'rgba(47, 95, 179, 0.25)',
+              },
+              success: {
+                DEFAULT: '#1f9d63',
+                bg: 'rgba(31, 157, 99, 0.10)',
+                border: 'rgba(31, 157, 99, 0.28)',
+              },
+              warn: {
+                DEFAULT: '#b45309',
+                bg: 'rgba(180, 83, 9, 0.10)',
+                border: 'rgba(180, 83, 9, 0.28)',
+              },
+              critical: {
+                DEFAULT: '#c0392b',
+                bg: 'rgba(192, 57, 43, 0.10)',
+                border: 'rgba(192, 57, 43, 0.28)',
+              },
             },
             borderRadius: {
-              sm: '4px',
-              md: '8px',
-              lg: '8px',
+              sm: '8px',
+              md: '10px',
+              lg: '12px',
+              full: '9999px',
+            },
+            boxShadow: {
+              card: '0 1px 2px rgba(18,29,51,.06), 0 12px 32px rgba(18,29,51,.08)',
+              floating: '0 16px 44px rgba(18,29,51,.22)',
             },
           }
         }
       }
     </script>
   </head>
-  <body class="bg-[#121011] text-[#f0ece4] antialiased font-sans selection:bg-[#8a4a6b]/30 selection:text-white">
+  <body class="bg-[#eef0f4] text-[#17233a] antialiased font-sans selection:bg-[#2f5fb3]/20 selection:text-[#17233a]">
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
   </body>

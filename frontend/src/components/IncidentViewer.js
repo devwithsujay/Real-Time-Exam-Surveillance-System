@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Video, Play, Pause, Volume2, VolumeX, Download, ChevronLeft,
-  AlertTriangle, ShieldAlert, Sparkles
+  AlertTriangle, ShieldAlert, Sparkles, Clock, Camera
 } from 'lucide-react';
 
 function IncidentViewer({ events, examId, selectedEventId }) {
@@ -82,37 +82,41 @@ function IncidentViewer({ events, examId, selectedEventId }) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-transparent">
-      {/* Header */}
-      <div className="px-4 sm:px-5 py-2.5 border-b border-[rgba(244,241,235,0.07)] bg-[#1a1719] flex items-center justify-between">
+    <div className="h-full flex flex-col bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] overflow-hidden min-h-0 transition-colors">
+      {/* Apple macOS Toolbar */}
+      <div className="px-6 py-3.5 border-b border-black/5 dark:border-white/10 bg-[#fbfbfd]/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl flex items-center justify-between z-10">
         <div>
           <div className="flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-[#c76454]" />
-            <h2 className="text-xs font-semibold text-[#f0ece4] font-heading">
-              Forensic Evidence Dossier & Video Analysis
+            <ShieldAlert className="w-4 h-4 text-[#ff3b30]" />
+            <h2 className="text-sm font-semibold tracking-tight text-[#1d1d1f] dark:text-white">
+              Incident Evidence & Video Analysis
             </h2>
           </div>
-          <p className="text-[11px] text-[#a89f97] mt-0.5 font-sans">
-            Cryptographically bound evidentiary captures for exam arbitration and forensics
+          <p className="text-xs text-[#86868b] dark:text-[#a1a1a6] mt-0.5">
+            Synchronized recordings and behavioral assessments for exam arbitration
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-0.5 rounded bg-[#221e20] border border-[rgba(244,241,235,0.08)] text-xs font-mono text-[#f0ece4]">
-            <strong className="text-[#f0ece4]">{incidentEvents.length}</strong> Evidence Dossier{incidentEvents.length !== 1 ? 's' : ''}
+          <span className="px-3 py-1 rounded-full bg-black/5 dark:bg-white/10 text-xs font-medium text-[#1d1d1f] dark:text-white">
+            <span className="text-[#0071e3] font-semibold">{incidentEvents.length}</span> Record{incidentEvents.length !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
 
       {/* Main Container */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-        {/* Left: Incident List */}
-        <div className="w-full lg:w-80 border-r border-[rgba(244,241,235,0.07)] bg-[#0b0a0a] overflow-y-auto flex-shrink-0 divide-y divide-[rgba(244,241,235,0.06)]">
+        {/* Left: Apple Source List */}
+        <div className="w-full lg:w-88 border-r border-black/5 dark:border-white/10 bg-[#fbfbfd]/60 dark:bg-[#1c1c1e]/60 backdrop-blur-xl overflow-y-auto flex-shrink-0 p-3 space-y-2">
           {incidentEvents.length === 0 ? (
-            <div className="p-8 text-center text-[#6b6560]">
-              <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-[#6b6560]" />
-              <p className="text-xs font-medium text-[#f0ece4] font-heading">No High Severity Evidence</p>
-              <p className="text-[11px] text-[#a89f97] mt-1 font-sans">High/Critical infractions with recorded media will appear here.</p>
+            <div className="p-8 text-center text-[#86868b] dark:text-[#a1a1a6]">
+              <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/10 flex items-center justify-center mx-auto mb-3">
+                <AlertTriangle className="w-6 h-6 text-[#86868b]" />
+              </div>
+              <p className="text-sm font-semibold text-[#1d1d1f] dark:text-white">No Flagged Incidents</p>
+              <p className="text-xs text-[#86868b] dark:text-[#a1a1a6] mt-1">
+                Priority infractions with recorded media will appear here automatically.
+              </p>
             </div>
           ) : (
             incidentEvents.map((event) => {
@@ -121,43 +125,48 @@ function IncidentViewer({ events, examId, selectedEventId }) {
               return (
                 <div
                   key={event.event_id}
-                  className={`p-3 cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-[#221e20] border-l-2 border-[#b8789a]'
-                      : 'hover:bg-[#1a1719]'
-                  }`}
                   onClick={() => setSelectedEvent(event)}
+                  className={`p-3.5 rounded-2xl cursor-pointer transition-all ${
+                    isSelected
+                      ? 'bg-white dark:bg-[#2c2c2e] shadow-sm ring-1 ring-black/5 dark:ring-white/15'
+                      : 'hover:bg-black/[0.03] dark:hover:bg-white/5'
+                  }`}
                 >
-                  <div className="flex items-start gap-2.5">
-                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
-                      isCritical ? 'bg-[#c76454]' : 'bg-[#c98a52]'
+                  <div className="flex items-start gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${
+                      isCritical ? 'bg-[#ff3b30]' : 'bg-[#ff9500]'
                     }`} />
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className={`text-xs font-semibold truncate font-sans ${isSelected ? 'text-[#f0ece4]' : 'text-[#a89f97]'}`}>
+                        <span className={`text-xs font-semibold truncate ${
+                          isSelected ? 'text-[#1d1d1f] dark:text-white' : 'text-[#86868b] dark:text-[#a1a1a6]'
+                        }`}>
                           {event.event_type.replace(/_/g, ' ')}
                         </span>
-                        <span className={`text-[9px] font-mono px-1.5 py-px rounded border font-semibold ${
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                           isCritical
-                            ? 'bg-[#c76454]/15 text-[#c76454] border-[#c76454]/30'
-                            : 'bg-[#c98a52]/15 text-[#c98a52] border-[#c98a52]/30'
+                            ? 'bg-[#ff3b30]/15 text-[#ff3b30]'
+                            : 'bg-[#ff9500]/15 text-[#ff9500]'
                         }`}>
                           {event.severity}
                         </span>
                       </div>
 
-                      <p className="text-[11px] text-[#a89f97] line-clamp-2 leading-relaxed font-sans">
+                      <p className="text-xs text-[#86868b] dark:text-[#a1a1a6] line-clamp-2 leading-relaxed">
                         {event.description}
                       </p>
 
-                      <div className="flex items-center gap-2 mt-1.5 text-[10px] font-mono text-[#6b6560]">
-                        <span>{new Date(event.timestamp).toLocaleTimeString()}</span>
+                      <div className="flex items-center gap-2 mt-2 text-[11px] text-[#86868b] dark:text-[#a1a1a6]">
+                        <span className="flex items-center gap-1">
+                          <Clock size={11} />
+                          {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
                         <span>•</span>
-                        <span>TRK #{event.track_id}</span>
+                        <span>Track #{event.track_id}</span>
                         {event.evidence_clip_path && (
-                          <span className="ml-auto inline-flex items-center gap-1 text-[9px] text-[#6ba883] bg-[#6ba883]/10 px-1.5 py-px rounded border border-[#6ba883]/25">
-                            <Video size={9} /> CLIP
+                          <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-[#34c759] bg-[#34c759]/10 px-2 py-0.5 rounded-full font-medium">
+                            <Video size={10} /> Video
                           </span>
                         )}
                       </div>
@@ -170,7 +179,7 @@ function IncidentViewer({ events, examId, selectedEventId }) {
         </div>
 
         {/* Right: Forensic Workspace */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#121011]">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#f5f5f7] dark:bg-[#000000]">
           {selectedEvent ? (
             <IncidentDetail
               event={selectedEvent}
@@ -190,11 +199,13 @@ function IncidentViewer({ events, examId, selectedEventId }) {
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center max-w-sm ess-card p-6 text-[#a89f97]">
-                <Video className="w-8 h-8 mx-auto mb-2 text-[#6b6560]" />
-                <p className="text-sm font-semibold text-[#f0ece4] font-heading">Select Forensic Record</p>
-                <p className="text-xs text-[#a89f97] mt-1 font-sans">
-                  Choose an incident from the evidentiary register to review synchronized video clips, VLM rationale, and telemetry.
+              <div className="text-center max-w-sm rounded-3xl bg-white dark:bg-[#1c1c1e] border border-black/5 dark:border-white/10 p-8 text-[#86868b] dark:text-[#a1a1a6] shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/10 flex items-center justify-center mx-auto mb-3 text-[#86868b]">
+                  <Video className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-semibold text-[#1d1d1f] dark:text-white">Select an Incident</p>
+                <p className="text-xs text-[#86868b] dark:text-[#a1a1a6] mt-1">
+                  Choose a record from the list to review synchronized playback and AI behavioral reasoning.
                 </p>
               </div>
             </div>
@@ -226,36 +237,36 @@ function IncidentDetail({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden min-h-0">
       {/* Detail Toolbar */}
-      <div className="px-4 sm:px-5 py-2.5 border-b border-[rgba(244,241,235,0.07)] bg-[#1a1719] flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
+      <div className="px-6 py-3 border-b border-black/5 dark:border-white/10 bg-white/70 dark:bg-[#1c1c1e]/70 backdrop-blur-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <button
             onClick={onClose}
-            className="p-1 hover:bg-[#221e20] rounded text-[#a89f97] hover:text-[#f0ece4] transition-colors lg:hidden"
+            className="p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-full text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-all lg:hidden"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-semibold text-[#f0ece4] tracking-tight font-heading">
+              <h3 className="text-sm font-semibold text-[#1d1d1f] dark:text-white">
                 {event.event_type.replace(/_/g, ' ')}
               </h3>
-              <span className={`text-[9px] font-mono px-1.5 py-px rounded border font-semibold ${
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                 isCritical
-                  ? 'bg-[#c76454]/15 text-[#c76454] border-[#c76454]/30'
-                  : 'bg-[#c98a52]/15 text-[#c98a52] border-[#c98a52]/30'
+                  ? 'bg-[#ff3b30]/15 text-[#ff3b30]'
+                  : 'bg-[#ff9500]/15 text-[#ff9500]'
               }`}>
                 {event.severity}
               </span>
             </div>
-            <p className="text-[10px] font-mono text-[#a89f97] mt-0.5">
-              Timestamp: {new Date(event.timestamp).toLocaleString()} • CAM-{event.camera_id ?? 0}
+            <p className="text-[11px] text-[#86868b] dark:text-[#a1a1a6] mt-0.5">
+              {new Date(event.timestamp).toLocaleString()} • Camera {event.camera_id ?? 0}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded bg-[#221e20] border border-[rgba(244,241,235,0.08)] text-xs font-mono text-[#f0ece4]">
-            Confidence: <strong className="text-[#b8789a]">{Math.round((event.confidence || 0) * 100)}%</strong>
+          <span className="px-3 py-1 rounded-full bg-black/5 dark:bg-white/10 text-xs font-medium text-[#1d1d1f] dark:text-white">
+            Confidence: <span className="text-[#0071e3] font-semibold">{Math.round((event.confidence || 0) * 100)}%</span>
           </span>
         </div>
       </div>
@@ -263,7 +274,7 @@ function IncidentDetail({
       {/* Media & Forensic Panels */}
       <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0">
         {/* Video / Keyframe Player */}
-        <div className="flex-1 min-w-0 bg-[#0b0a0a] relative flex flex-col justify-between overflow-hidden">
+        <div className="flex-1 min-w-0 bg-black relative flex flex-col justify-between overflow-hidden">
           {event.evidence_clip_path ? (
             <div className="relative w-full h-full flex items-center justify-center">
               <video
@@ -276,14 +287,14 @@ function IncidentDetail({
                 onClick={togglePlay}
               />
 
-              {/* Forensic Video Controls HUD */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0b0a0a]/95 via-[#0b0a0a]/60 to-transparent p-3">
-                <div className="flex items-center gap-2.5 max-w-2xl mx-auto bg-[#1a1719]/95 px-3 py-2 rounded border border-[rgba(244,241,235,0.12)] shadow-lg">
+              {/* Apple TV / QuickTime Floating Control Bar */}
+              <div className="absolute bottom-5 left-0 right-0 px-6 flex justify-center pointer-events-none">
+                <div className="pointer-events-auto flex items-center gap-3 w-full max-w-xl bg-black/60 backdrop-blur-2xl px-4 py-2.5 rounded-full border border-white/15 shadow-2xl">
                   <button
                     onClick={togglePlay}
-                    className="p-1.5 bg-[#8a4a6b] hover:bg-[#9b5579] rounded text-white transition-colors"
+                    className="w-8 h-8 rounded-full bg-white text-black hover:scale-105 active:scale-95 flex items-center justify-center transition-all cursor-pointer shrink-0"
                   >
-                    {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+                    {playing ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-black ml-0.5" />}
                   </button>
 
                   <input
@@ -293,104 +304,104 @@ function IncidentDetail({
                     step={0.1}
                     value={currentTime}
                     onChange={handleSeek}
-                    className="flex-1 h-1 bg-[#221e20] rounded appearance-none accent-[#8a4a6b] cursor-pointer"
+                    className="flex-1 h-1.5 bg-white/20 rounded-full appearance-none accent-[#0071e3] cursor-pointer"
                   />
 
-                  <span className="text-[#f0ece4] text-[11px] font-mono w-20 text-right">
+                  <span className="text-white text-xs font-mono font-medium shrink-0">
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
 
-                  <div className="flex items-center gap-1.5 pl-2 border-l border-[rgba(244,241,235,0.08)]">
+                  <div className="flex items-center gap-2 pl-2 border-l border-white/20 shrink-0">
                     <button
                       onClick={() => handleVolumeChange(volume > 0 ? 0 : 1)}
-                      className="p-1 text-[#a89f97] hover:text-[#f0ece4] transition-colors"
+                      className="p-1.5 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition-colors"
                     >
-                      {volume > 0 ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                      {volume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                     </button>
 
                     <a
                       href={`/api/events/${event.event_id}/clip`}
                       download
-                      className="p-1 text-[#b8789a] hover:text-[#f0ece4] transition-colors"
+                      className="p-1.5 text-[#0071e3] hover:text-white rounded-full hover:bg-white/10 transition-colors"
                       title="Download Evidence MP4"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      <Download className="w-4 h-4" />
                     </a>
                   </div>
                 </div>
               </div>
             </div>
           ) : event.evidence_screenshot_path ? (
-            <div className="relative w-full h-full flex items-center justify-center p-4">
+            <div className="relative w-full h-full flex items-center justify-center p-6">
               <img
                 src={`/api/events/${event.event_id}/screenshot`}
                 alt="Evidence keyframe capture"
-                className="max-w-full max-h-full rounded border border-[rgba(244,241,235,0.08)] object-contain shadow-md"
+                className="max-w-full max-h-full rounded-2xl border border-white/10 object-contain shadow-2xl"
               />
             </div>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-[#6b6560] p-6">
-              <Video className="w-8 h-8 mb-2 text-[#6b6560]" />
-              <p className="text-xs text-[#a89f97]">No synced media artifact</p>
-              <p className="text-[11px] text-[#6b6560] mt-0.5">Logged event has metadata record only</p>
+            <div className="w-full h-full flex flex-col items-center justify-center text-[#86868b] p-6">
+              <Camera className="w-10 h-10 mb-2 opacity-60" />
+              <p className="text-sm text-white font-medium">No Synced Media</p>
+              <p className="text-xs text-[#86868b] mt-0.5">Event recorded as telemetry log only</p>
             </div>
           )}
         </div>
 
         {/* Forensic Dossier Sidebar */}
-        <div className="w-full xl:w-88 border-t xl:border-t-0 xl:border-l border-[rgba(244,241,235,0.07)] bg-[#1a1719] overflow-y-auto p-4 space-y-3 flex-shrink-0">
-          {/* Highlight Card: Infraction Rationale */}
-          <div className="ess-card p-3 border-l-[3px] border-l-[#c2ab5c] bg-[#1e1b17]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-[#c2ab5c] flex items-center gap-1 font-heading">
-                <AlertTriangle size={12} className="text-[#c2ab5c]" />
-                <span>Infraction Rationale</span>
+        <div className="w-full xl:w-96 border-t xl:border-t-0 xl:border-l border-black/5 dark:border-white/10 bg-[#fbfbfd]/70 dark:bg-[#1c1c1e]/70 backdrop-blur-xl overflow-y-auto p-5 space-y-4 shrink-0">
+          {/* Infraction Rationale */}
+          <div className="bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/10 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-[#ff9500] flex items-center gap-1.5">
+                <AlertTriangle size={13} />
+                <span>Behavior Observation</span>
               </span>
-              <span className="text-xs font-mono font-semibold text-[#f0ece4]">
+              <span className="text-xs font-semibold text-[#1d1d1f] dark:text-white">
                 {Math.round((event.confidence || 0) * 100)}% Confidence
               </span>
             </div>
-            <p className="text-xs text-[#f0ece4] leading-relaxed font-sans">
+            <p className="text-xs text-[#1d1d1f] dark:text-[#f5f5f7] leading-relaxed">
               {event.description || 'Proctoring heuristic threshold exceeded.'}
             </p>
           </div>
 
-          {/* Multimodal VLM Forensic Reasoning */}
+          {/* Apple Intelligence / VLM Forensic Reasoning */}
           {(event.analysis_data?.vlm_reasoning || event.analysis_data?.vlm_response) && (
-            <div className="ess-card p-3 border-[rgba(138,74,107,0.35)] bg-[#1e171b]">
-              <div className="flex items-center gap-1 text-[11px] text-[#b8789a] font-semibold mb-1.5 font-heading">
-                <Sparkles size={12} className="text-[#b8789a]" />
-                <span>VLM Forensic Reasoning:</span>
+            <div className="bg-gradient-to-b from-[#0071e3]/10 to-transparent border border-[#0071e3]/20 rounded-2xl p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 text-xs text-[#0071e3] font-semibold mb-2">
+                <Sparkles size={13} />
+                <span>AI Behavioral Assessment</span>
               </div>
-              <p className="text-[11px] font-mono text-[#f0ece4] leading-relaxed whitespace-pre-wrap">
+              <p className="text-xs text-[#1d1d1f] dark:text-[#f5f5f7] leading-relaxed whitespace-pre-wrap">
                 {event.analysis_data.vlm_reasoning || event.analysis_data.vlm_response}
               </p>
             </div>
           )}
 
-          <DetailSection title="Event Cryptographic Metadata">
-            <DetailRow label="Event ID" value={event.event_id} />
-            <DetailRow label="Anomaly Type" value={event.event_type.replace(/_/g, ' ')} />
+          <DetailSection title="Event Details">
+            <DetailRow label="Event Identifier" value={event.event_id} />
+            <DetailRow label="Pattern Type" value={event.event_type.replace(/_/g, ' ')} />
             <DetailRow label="Severity" value={event.severity} />
             <DetailRow label="Track ID" value={event.track_id ? `#${event.track_id}` : 'N/A'} />
-            <DetailRow label="Sensor Node" value={`CAM-${event.camera_id ?? 0}`} />
+            <DetailRow label="Sensor Unit" value={`Camera ${event.camera_id ?? 0}`} />
             <DetailRow label="Confidence" value={`${Math.round((event.confidence || 0) * 100)}%`} />
-            {event.participant_id && <DetailRow label="Participant ID" value={event.participant_id} />}
+            {event.participant_id && <DetailRow label="Participant" value={event.participant_id} />}
           </DetailSection>
 
           {event.evidence_screenshot_path && event.evidence_clip_path && (
-            <DetailSection title="Associated Keyframe Screenshot">
+            <DetailSection title="Keyframe Capture">
               <img
                 src={`/api/events/${event.event_id}/screenshot`}
                 alt="Evidence screenshot"
-                className="w-full rounded border border-[rgba(244,241,235,0.08)]"
+                className="w-full rounded-xl border border-black/5 dark:border-white/10 mt-1 shadow-sm"
               />
             </DetailSection>
           )}
 
           {event.analysis_data && (
-            <DetailSection title="Raw Machine Telemetry">
-              <pre className="text-[10px] font-mono text-[#f0ece4] bg-[#0b0a0a] p-2.5 rounded border border-[rgba(244,241,235,0.07)] overflow-auto max-h-40">
+            <DetailSection title="Sensor Telemetry">
+              <pre className="text-[11px] font-mono text-[#1d1d1f] dark:text-[#f5f5f7] bg-black/5 dark:bg-white/5 p-3 rounded-xl overflow-auto max-h-40 border border-black/5 dark:border-white/10 mt-1">
                 {JSON.stringify(event.analysis_data, null, 2)}
               </pre>
             </DetailSection>
@@ -403,20 +414,18 @@ function IncidentDetail({
 
 function DetailSection({ title, children }) {
   return (
-    <div className="ess-card overflow-hidden">
-      <div className="px-3 py-1.5 bg-[#221e20] border-b border-[rgba(244,241,235,0.07)]">
-        <h4 className="text-[11px] font-semibold text-[#f0ece4] font-heading">{title}</h4>
-      </div>
-      <div className="p-3">{children}</div>
+    <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#2c2c2e] border border-black/5 dark:border-white/10 shadow-sm p-4">
+      <h4 className="text-xs font-semibold text-[#86868b] dark:text-[#a1a1a6] mb-2">{title}</h4>
+      <div>{children}</div>
     </div>
   );
 }
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex items-start gap-2 text-[11px] mb-1.5">
-      <span className="text-[#a89f97] w-32 shrink-0 font-sans">{label}:</span>
-      <span className="text-[#f0ece4] font-mono font-medium truncate">{value}</span>
+    <div className="flex items-center justify-between text-xs py-1.5 border-b border-black/[0.03] dark:border-white/[0.05] last:border-0">
+      <span className="text-[#86868b] dark:text-[#a1a1a6]">{label}</span>
+      <span className="font-medium text-[#1d1d1f] dark:text-white truncate max-w-[180px]">{value}</span>
     </div>
   );
 }
