@@ -14,6 +14,7 @@ import CreateExamModal from './components/CreateExamModal';
 import LoginModal from './components/LoginModal';
 import StaffManagementModal from './components/StaffManagementModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { api } from './services/api';
 
 const WS_BASE = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
@@ -40,26 +41,8 @@ function SurveillanceDashboard() {
   const [selectedIncidentId, setSelectedIncidentId] = useState(null);
   const frameHandlersRef = useRef(new Set());
 
-  // Dark Mode State & Persistence
-  const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('argus_theme');
-    if (saved) return saved === 'dark';
-    return false;
-  });
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('argus_theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.setAttribute('data-theme', 'light');
-      localStorage.setItem('argus_theme', 'light');
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark(prev => !prev);
+  // Unified Theme Hook
+  const { isDark, toggleTheme } = useTheme();
 
   const handleViewIncident = (eventId) => {
     setSelectedIncidentId(eventId);
@@ -412,12 +395,13 @@ function SurveillanceDashboard() {
 
             {/* Dark Mode Toggle Button */}
             <button
+              type="button"
               onClick={toggleTheme}
               title={isDark ? 'Switch to Light Appearance' : 'Switch to Dark Appearance'}
               className="w-8 h-8 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 transition-colors cursor-pointer"
               aria-label="Toggle appearance"
             >
-              {isDark ? <Sun size={14} className="text-amber-400" /> : <Moon size={14} className="text-[#0071e3]" />}
+              {isDark ? <Sun size={14} className="text-amber-400 pointer-events-none" /> : <Moon size={14} className="text-[#0071e3] pointer-events-none" />}
             </button>
 
             <div className="w-px h-4 bg-black/[0.08] dark:border-white/[0.08]" />
@@ -733,9 +717,11 @@ function SurveillanceDashboard() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppRoot />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppRoot />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
@@ -744,9 +730,9 @@ function AppRoot() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#eef0f4] dark:bg-[#090e1a] flex items-center justify-center text-[#5d6b82] dark:text-[#94a3b8] text-xs">
+      <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#000000] flex items-center justify-center text-[#86868b] dark:text-[#a1a1a6] text-xs">
         <div className="ess-spinner mr-2.5" />
-        <span className="font-mono text-[#17233a] dark:text-slate-100 font-medium tracking-wider text-[11px]">INITIALIZING SECURITY SESSION...</span>
+        <span className="font-mono text-[#1d1d1f] dark:text-white font-medium tracking-wider text-[11px]">INITIALIZING SECURITY SESSION...</span>
       </div>
     );
   }

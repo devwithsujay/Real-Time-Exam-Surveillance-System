@@ -1,37 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ArrowRight, Eye, EyeOff, AlertCircle, Sun, Moon, Lock, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 function LoginModal({ isOpen, onClose }) {
   const { login } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const [selectedRole, setSelectedRole] = useState('admin');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('Admin@12345');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof document !== 'undefined') {
-      return document.documentElement.classList.contains('dark') ||
-        localStorage.getItem('argus_theme') === 'dark';
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      document.body.classList.add('dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('argus_theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.remove('dark');
-      document.documentElement.setAttribute('data-theme', 'light');
-      localStorage.setItem('argus_theme', 'light');
-    }
-  }, [isDark]);
 
   const ROLES = [
     { id: 'admin', label: 'Admin', u: 'admin', p: 'Admin@12345' },
@@ -77,12 +57,12 @@ function LoginModal({ isOpen, onClose }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsDark(!isDark)}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-[#f5f5f7] dark:bg-[#1c1c1e] hover:bg-[#e8e8ed] dark:hover:bg-[#2c2c2e] transition-colors"
-            title={isDark ? "Light Appearance" : "Dark Appearance"}
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-[#f5f5f7] dark:bg-[#1c1c1e] hover:bg-[#e8e8ed] dark:hover:bg-[#2c2c2e] transition-colors cursor-pointer"
+            title={isDark ? "Switch to Light Appearance" : "Switch to Dark Appearance"}
             aria-label="Toggle appearance"
           >
-            {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            {isDark ? <Sun size={15} className="text-amber-400 pointer-events-none" /> : <Moon size={15} className="text-[#0071e3] pointer-events-none" />}
           </button>
 
           {onClose && (
