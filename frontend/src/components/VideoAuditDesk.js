@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Film, Upload, Play, Pause, RotateCcw, Volume2, VolumeX, Download, Trash2,
-  AlertTriangle, Eye, Maximize2, RefreshCw, Layers, X, Plus
+  AlertTriangle, Eye, Maximize2, RefreshCw, Layers, X, Plus, Sparkles
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -61,6 +61,8 @@ export default function VideoAuditDesk({ user, exam }) {
   const [muted, setMuted] = useState(false);
   const [previewSnapshot, setPreviewSnapshot] = useState(null);
   const [filterSeverity, setFilterSeverity] = useState('ALL');
+  const [verifyingIncidentId, setVerifyingIncidentId] = useState(null);
+  const [batchVerifying, setBatchVerifying] = useState(false);
 
   // Fetch all audits
   const fetchAudits = useCallback(async () => {
@@ -216,6 +218,45 @@ export default function VideoAuditDesk({ user, exam }) {
     } catch (err) {
       console.error('Failed to delete audit:', err);
       alert('Delete failed: ' + err.message);
+    }
+  };
+
+  // VLM Verification Handlers
+  const handleVerifyIncidentVLM = async (incidentId) => {
+    if (!selectedAuditId || !incidentId) return;
+    try {
+      setVerifyingIncidentId(incidentId);
+      const res = await api.videoAudit.verifyIncidentVLM(selectedAuditId, incidentId);
+      if (selectedAudit && selectedAudit.incidents) {
+        setSelectedAudit({
+          ...selectedAudit,
+          incidents: selectedAudit.incidents.map(inc =>
+            inc.incident_id === incidentId
+              ? { ...inc, vlm_verified: true, vlm_analysis: res.vlm_analysis }
+              : inc
+          )
+        });
+      }
+    } catch (err) {
+      console.error('VLM verification error:', err);
+      alert(`VLM verification failed: ${err.message || err}`);
+    } finally {
+      setVerifyingIncidentId(null);
+    }
+  };
+
+  const handleBatchVerifyVLM = async () => {
+    if (!selectedAuditId) return;
+    try {
+      setBatchVerifying(true);
+      await api.videoAudit.verifyAllVLM(selectedAuditId);
+      const updated = await api.videoAudit.get(selectedAuditId);
+      setSelectedAudit(updated);
+    } catch (err) {
+      console.error('Batch VLM verification error:', err);
+      alert(`Batch VLM verification failed: ${err.message || err}`);
+    } finally {
+      setBatchVerifying(false);
     }
   };
 
@@ -588,21 +629,34 @@ export default function VideoAuditDesk({ user, exam }) {
                     <span>Captured Forensic Infractions ({filteredIncidents.length})</span>
                   </h4>
 
-                  {/* Severity Filter Pills */}
-                  <div className="flex items-center gap-1.5 bg-white dark:bg-[#1c1c1e] p-1 rounded-xl border border-black/[0.06] dark:border-white/[0.06] text-xs">
-                    {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((sev) => (
-                      <button
-                        key={sev}
-                        onClick={() => setFilterSeverity(sev)}
-                        className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
-                          filterSeverity === sev
-                            ? 'bg-[#0071e3] text-white shadow-xs font-semibold'
-                            : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
-                        }`}
-                      >
-                        {sev}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Batch VLM Verification Button */}
+                    <button
+                      onClick={handleBatchVerifyVLM}
+                      disabled={batchVerifying || filteredIncidents.length === 0}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-medium text-[#0071e3] hover:text-white bg-[#0071e3]/10 hover:bg-[#0071e3] border border-[#0071e3]/25 transition-all cursor-pointer disabled:opacity-40"
+                      title="Run VLM second-opinion inspection on all captured keyframes"
+                    >
+                      <Sparkles size={12} className={batchVerifying ? "animate-spin" : ""} />
+                      <span>{batchVerifying ? "Verifying All..." : "Batch VLM Verify"}</span>
+                    </button>
+
+                    {/* Severity Filter Pills */}
+                    <div className="flex items-center gap-1.5 bg-white dark:bg-[#1c1c1e] p-1 rounded-xl border border-black/[0.06] dark:border-white/[0.06] text-xs">
+                      {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((sev) => (
+                        <button
+                          key={sev}
+                          onClick={() => setFilterSeverity(sev)}
+                          className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                            filterSeverity === sev
+                              ? 'bg-[#0071e3] text-white shadow-xs font-semibold'
+                              : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                          }`}
+                        >
+                          {sev}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -618,55 +672,110 @@ export default function VideoAuditDesk({ user, exam }) {
                         ? api.videoAudit.snapshotUrl(selectedAudit.audit_id, inc.snapshot_path.replace(/^snapshots\//, ''))
                         : null;
 
+                      let vlmData = null;
+                      if (inc.vlm_analysis) {
+                        try {
+                          vlmData = typeof inc.vlm_analysis === 'string' ? JSON.parse(inc.vlm_analysis) : inc.vlm_analysis;
+                        } catch (e) {}
+                      }
+
                       return (
                         <div
                           key={inc.incident_id}
-                          className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl p-3.5 shadow-xs flex gap-3.5 items-start hover:border-[#0071e3]/40 transition-colors"
+                          className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl p-3.5 shadow-xs flex flex-col gap-2.5 hover:border-[#0071e3]/40 transition-colors"
                         >
-                          {/* Keyframe Snapshot Thumbnail */}
-                          {snapUrl ? (
-                            <div
-                              onClick={() => setPreviewSnapshot(snapUrl)}
-                              className="w-28 h-20 bg-black rounded-xl overflow-hidden flex-shrink-0 border border-black/10 dark:border-white/10 relative group cursor-pointer"
-                            >
-                              <img src={snapUrl} alt="Infraction Snapshot" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-mono">
-                                <Maximize2 size={14} />
+                          <div className="flex gap-3.5 items-start w-full">
+                            {/* Keyframe Snapshot Thumbnail */}
+                            {snapUrl ? (
+                              <div
+                                onClick={() => setPreviewSnapshot(snapUrl)}
+                                className="w-28 h-20 bg-black rounded-xl overflow-hidden flex-shrink-0 border border-black/10 dark:border-white/10 relative group cursor-pointer"
+                              >
+                                <img src={snapUrl} alt="Infraction Snapshot" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-mono">
+                                  <Maximize2 size={14} />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-28 h-20 bg-black/5 dark:bg-white/5 rounded-xl flex items-center justify-center text-[#86868b] flex-shrink-0">
+                                <Eye size={16} />
+                              </div>
+                            )}
+
+                            {/* Infraction Details */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border uppercase tracking-wider font-semibold ${sevStyle.bg}`}>
+                                  {inc.severity}
+                                </span>
+                                <button
+                                  onClick={() => jumpToTime(inc.timestamp_seconds)}
+                                  className="flex items-center gap-1 font-mono text-xs text-[#0071e3] hover:underline font-semibold cursor-pointer"
+                                >
+                                  <Play size={11} className="fill-current" />
+                                  <span>{formatTime(inc.timestamp_seconds)}</span>
+                                </button>
+                              </div>
+
+                              <h5 className="text-xs font-bold text-[#1d1d1f] dark:text-white truncate">
+                                {inc.event_type.replace('_', ' ')}
+                              </h5>
+                              <p className="text-[11px] text-[#86868b] leading-tight line-clamp-2 mt-0.5">
+                                {inc.description}
+                              </p>
+
+                              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.04] text-[10px] font-mono text-[#86868b]">
+                                <span>CONFIDENCE: {Math.round(inc.confidence * 100)}%</span>
+                                <span>FRAME {inc.frame_index}</span>
                               </div>
                             </div>
-                          ) : (
-                            <div className="w-28 h-20 bg-black/5 dark:bg-white/5 rounded-xl flex items-center justify-center text-[#86868b] flex-shrink-0">
-                              <Eye size={16} />
-                            </div>
-                          )}
-
-                          {/* Infraction Details */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-1 mb-1">
-                              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border uppercase tracking-wider font-semibold ${sevStyle.bg}`}>
-                                {inc.severity}
-                              </span>
-                              <button
-                                onClick={() => jumpToTime(inc.timestamp_seconds)}
-                                className="flex items-center gap-1 font-mono text-xs text-[#0071e3] hover:underline font-semibold cursor-pointer"
-                              >
-                                <Play size={11} className="fill-current" />
-                                <span>{formatTime(inc.timestamp_seconds)}</span>
-                              </button>
-                            </div>
-
-                            <h5 className="text-xs font-bold text-[#1d1d1f] dark:text-white truncate">
-                              {inc.event_type.replace('_', ' ')}
-                            </h5>
-                            <p className="text-[11px] text-[#86868b] leading-tight line-clamp-2 mt-0.5">
-                              {inc.description}
-                            </p>
-
-                            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.04] text-[10px] font-mono text-[#86868b]">
-                              <span>CONFIDENCE: {Math.round(inc.confidence * 100)}%</span>
-                              <span>FRAME {inc.frame_index}</span>
-                            </div>
                           </div>
+
+                          {/* VLM Inspection Section */}
+                          {inc.vlm_verified && vlmData ? (
+                            <div className="p-2.5 rounded-xl bg-[#0071e3]/5 dark:bg-[#0071e3]/10 border border-[#0071e3]/15 text-[11px] text-[#1d1d1f] dark:text-[#f5f5f7]">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <div className="flex items-center gap-1 font-semibold text-[#0071e3] text-[10px] uppercase tracking-wider">
+                                  <Sparkles size={11} />
+                                  <span>VLM Forensic Verdict ({vlmData.model || 'Vision AI'})</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-[#86868b]">
+                                  {Math.round((vlmData.confidence || 0.8) * 100)}% Conf
+                                </span>
+                              </div>
+                              <p className="italic text-[#1d1d1f] dark:text-[#e0e4ea] leading-snug">
+                                "{vlmData.description}"
+                              </p>
+                              {vlmData.detected_objects && vlmData.detected_objects.length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap mt-1.5 pt-1 border-t border-black/[0.04] dark:border-white/[0.04]">
+                                  <span className="text-[9px] uppercase tracking-wider text-[#86868b]">Objects:</span>
+                                  {vlmData.detected_objects.map((obj, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[9px] font-mono text-[#1d1d1f] dark:text-white">
+                                      {obj}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleVerifyIncidentVLM(inc.incident_id)}
+                              disabled={verifyingIncidentId === inc.incident_id}
+                              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-[#0071e3] hover:text-white bg-[#0071e3]/5 dark:bg-[#0071e3]/10 hover:bg-[#0071e3] border border-[#0071e3]/20 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              {verifyingIncidentId === inc.incident_id ? (
+                                <>
+                                  <div className="w-3 h-3 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin" />
+                                  <span>Inspecting with VLM...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={12} />
+                                  <span>Run VLM Deep Inspection</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
                       );
                     })}

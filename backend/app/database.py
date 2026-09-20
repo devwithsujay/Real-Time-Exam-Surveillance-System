@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 
@@ -38,6 +38,19 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Check and perform lightweight column additions for existing SQLite database
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text("PRAGMA table_info(video_audit_incidents)")).fetchall()
+            existing_cols = {row[1] for row in result}
+            if existing_cols:
+                if "vlm_verified" not in existing_cols:
+                    conn.execute(text("ALTER TABLE video_audit_incidents ADD COLUMN vlm_verified BOOLEAN DEFAULT 0"))
+                if "vlm_analysis" not in existing_cols:
+                    conn.execute(text("ALTER TABLE video_audit_incidents ADD COLUMN vlm_analysis TEXT"))
+    except Exception as e:
+        # Ignore if table doesn't exist yet or columns already exist
+        pass
 
 
 def get_db() -> Session:

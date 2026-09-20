@@ -123,6 +123,28 @@ def run_tests():
     assert pdf_res.content.startswith(b"%PDF-"), "Response is not valid PDF binary"
     print(f"    [PASS] Forensic PDF generated successfully! ({len(pdf_res.content)} bytes)")
 
+    # 5b. Test Two-Stage VLM Deep Verification Endpoints
+    print("\n[*] Step 5b: Testing Two-Stage VLM Verification Endpoints...")
+    vlm_all_res = requests.post(f"{BASE_URL}/api/v1/video-audit/{audit_id}/vlm-verify-all", headers=admin_headers)
+    print(f"    Batch VLM verify response: HTTP {vlm_all_res.status_code}")
+    assert vlm_all_res.status_code == 200, f"Expected 200, got {vlm_all_res.status_code}: {vlm_all_res.text}"
+    vlm_all_data = vlm_all_res.json()
+    print(f"    [PASS] Batch VLM verify succeeded: verified_count={vlm_all_data.get('verified_count')}")
+
+    # If there are incidents, test single-incident VLM verification endpoint
+    if detail.get("incidents") and len(detail["incidents"]) > 0:
+        first_incident = detail["incidents"][0]
+        inc_id = first_incident["id"]
+        vlm_single_res = requests.post(
+            f"{BASE_URL}/api/v1/video-audit/{audit_id}/incidents/{inc_id}/vlm-verify",
+            headers=admin_headers
+        )
+        print(f"    Single incident VLM verify response: HTTP {vlm_single_res.status_code}")
+        assert vlm_single_res.status_code == 200, f"Expected 200, got {vlm_single_res.status_code}"
+        print(f"    [PASS] Single incident VLM verify succeeded for incident #{inc_id}")
+    else:
+        print("    [NOTE] No infractions flagged in synthetic video; batch VLM verify handled 0 incidents cleanly.")
+
     # 6. Test Admin Delete
     print("\n[*] Step 6: Testing Admin Audit Deletion...")
     del_res = requests.delete(f"{BASE_URL}/api/v1/video-audit/{audit_id}", headers=admin_headers)

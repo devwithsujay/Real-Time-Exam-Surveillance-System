@@ -1,5 +1,8 @@
-import logging
+import os
 import time
+import json
+import base64
+import logging
 from typing import Optional, List
 from dataclasses import dataclass, field
 
@@ -252,3 +255,93 @@ class LMStudioVLM:
             raw_response=text,
             inference_time_ms=elapsed_ms
         )
+
+    async def analyze_image_file(self, file_path: str) -> VLMResult:
+        """Analyze an image file asynchronously by encoding to base64."""
+        if not os.path.isfile(file_path):
+            logger.warning(f"VLM image file not found: {file_path}")
+            return VLMResult()
+        try:
+            with open(file_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            return await self.analyze_frame(b64)
+        except Exception as e:
+            logger.warning(f"Failed to read image for VLM: {e}")
+            return VLMResult()
+
+    def analyze_image_file_sync(self, file_path: str) -> VLMResult:
+        """Synchronously analyze an image file (useful for background worker threads)."""
+        if not self.enabled or not os.path.isfile(file_path):
+            return VLMResult()
+        try:
+            with open(file_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+
+            prompt = (
+                "You are an AI exam proctor analyzing a surveillance snapshot of a student at an exam desk.\n"
+                "Inspect the image for these suspicious indicators:\n"
+                "1. MOBILE_PHONE: Person holding, using, or looking at a mobile phone or glowing screen.\n"
+                "2. UNAUTHORIZED_NOTES: Loose cheat sheets, unauthorized paper slips, or notes concealed under desk/lap.\n"
+                "3. WEARABLE_AUDIO: In-ear earbuds, headphones, or bluetooth earpiece visible on either ear.\n"
+                "4. COMMUNICATION: Actively turning and speaking or gesturing to another person.\n"
+                "5. PEEKING_AT_NEIGHBOR: Person turning head or leaning sideways to look at an adjacent candidate's exam desk or paper.\n"
+                "\n"
+                "CRITICAL RULES:\n"
+                "- Writing on an exam paper on the desk with a pen/pencil is NORMAL behavior, NOT cheating.\n"
+                "- Looking down directly at the exam paper on the desk is NORMAL behavior.\n"
+                "\n"
+                "Return ONLY a raw JSON object matching this schema:\n"
+                "{\n"
+                '  "phone_detected": boolean,\n'
+                '  "cheating_detected": boolean,\n'
+                '  "talking_detected": boolean,\n'
+                '  "earbud_detected": boolean,\n'
+                '  "peeking_detected": boolean,\n'
+                '  "detected_objects": ["desk", "paper", "pen", ...],\n'
+                '  "description": "1 brief sentence summarizing visible student activity",\n'
+                '  "confidence": float between 0.0 and 1.0\n'
+                "}"
+            )
+            t0 = time.time()
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.post(
+                    f"{self.base_url}/chat/completions",
+                    json={
+                        "model": self.model,
+                        "max_tokens": self.max_tokens,
+                        "temperature": 0.1,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/jpeg;base64,{b64}"
+                                        }
+                                    },
+                                    {"type": "text", "text": prompt}
+                                ]
+                            }
+                        ]
+                    }
+                )
+                elapsed = (time.time() - t0) * 1000
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return self._parse_response(text, elapsed)
+                return VLMResult(inference_time_ms=elapsed)
+        except Exception as e:
+            logger.debug(f"VLM sync error: {e}")
+            return VLMResult()
+
+
+_vlm_client_singleton: Optional[LMStudioVLM] = None
+
+
+def get_vlm_client() -> LMStudioVLM:
+    global _vlm_client_singleton
+    if _vlm_client_singleton is None:
+        _vlm_client_singleton = LMStudioVLM()
+    return _vlm_client_singleton

@@ -1,4 +1,5 @@
 import os
+import json
 from io import BytesIO
 from datetime import datetime
 
@@ -123,11 +124,23 @@ def generate_video_audit_pdf(audit, incidents, base_dir: str) -> bytes:
                 tc = f"{int(t_sec // 60):02d}:{int(t_sec % 60):02d}"
                 sev = getattr(inc.severity, "value", str(inc.severity))
                 sev_col = _SEV_COLORS.get(sev, colors.black).hexval()[2:]
+
+                vlm_clause = ""
+                if getattr(inc, "vlm_verified", False) and getattr(inc, "vlm_analysis", None):
+                    try:
+                        vdata = json.loads(inc.vlm_analysis)
+                        v_desc = vdata.get("description", "")
+                        v_conf = int(vdata.get("confidence", 0) * 100)
+                        v_model = vdata.get("model", "VLM")
+                        vlm_clause = f"<br/><font color='#0071e3'><b>VLM AI Assessment ({v_model}):</b></font> {v_desc} <i>({v_conf}% confidence)</i>"
+                    except Exception:
+                        pass
+
                 caption = Paragraph(
                     f"<b>TIMECODE {tc}</b> (Frame {inc.frame_index}) &nbsp;|&nbsp; "
                     f"<b>{getattr(inc.event_type, 'value', str(inc.event_type))}</b> &nbsp;|&nbsp; "
                     f"<font color='#{sev_col}'><b>{sev}</b></font> &nbsp;|&nbsp; "
-                    f"<i>{inc.description or ''}</i>",
+                    f"<i>{inc.description or ''}</i>{vlm_clause}",
                     caption_style
                 )
                 elements.append(KeepTogether([img, Spacer(1, 1 * mm), caption, Spacer(1, 4 * mm)]))

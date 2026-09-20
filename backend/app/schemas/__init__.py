@@ -320,9 +320,18 @@ class VideoAuditIncidentResponse(BaseModel):
     track_id: int = 0
     bbox: Optional[str] = None
     snapshot_path: Optional[str] = None
+    vlm_verified: bool = False
+    vlm_analysis: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class VideoAuditVLMVerificationResponse(BaseModel):
+    incident_id: str
+    vlm_verified: bool
+    vlm_analysis: Optional[Dict[str, Any]] = None
+    message: str
 
 
 class VideoAuditListItemResponse(BaseModel):

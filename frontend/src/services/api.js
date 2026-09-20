@@ -173,6 +173,8 @@ export const api = {
     streamUrl: (auditId) => `${API_BASE}/api/v1/video-audit/${auditId}/stream`,
     snapshotUrl: (auditId, filename) => `${API_BASE}/api/v1/video-audit/${auditId}/snapshots/${filename}`,
     downloadReport: (auditId) => request(`/api/v1/video-audit/${auditId}/report`, { asBlob: true }),
+    verifyIncidentVLM: (auditId, incidentId) => request(`/api/v1/video-audit/${auditId}/incidents/${incidentId}/vlm-verify`, { method: 'POST' }),
+    verifyAllVLM: (auditId) => request(`/api/v1/video-audit/${auditId}/vlm-verify-all`, { method: 'POST' }),
   }
 };
 

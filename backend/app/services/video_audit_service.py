@@ -7,10 +7,12 @@ import threading
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
+from sqlalchemy.orm import Session
 from app.database import get_db_session
 from app.models import VideoAudit, VideoAuditIncident, VideoAuditStatus, EventType, EventSeverity
 from app.services.detection_engine import DetectionEngine
 from app.services.mediapipe_analyzer import MediaPipeAnalyzer
+from app.services.vlm_client import get_vlm_client
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +257,12 @@ class VideoAuditService:
             db.commit()
             logger.info(f"Video audit {audit_id} finished successfully with {incidents_count} violations (Risk score: {audit.risk_score})")
 
+            # Stage 2: Automatic Post-Scan VLM Verification (if enabled)
+            try:
+                VideoAuditService._run_vlm_verification_pass(audit_id, db, video_path)
+            except Exception as vlm_err:
+                logger.warning(f"VLM post-scan verification pass skipped: {vlm_err}")
+
         except Exception as e:
             logger.exception(f"Video audit {audit_id} failed: {e}")
             try:
@@ -300,3 +308,121 @@ class VideoAuditService:
         except Exception as e:
             logger.error(f"Failed to save snapshot: {e}")
             return ""
+
+    @staticmethod
+    def _run_vlm_verification_pass(audit_id: str, db: Session, video_path: str):
+        """Stage 2: Automatic post-scan VLM second-opinion pass on unique keyframe snapshots."""
+        vlm = get_vlm_client()
+        if not vlm.enabled:
+            return
+
+        incidents = db.query(VideoAuditIncident).filter(
+            VideoAuditIncident.audit_id == audit_id,
+            VideoAuditIncident.vlm_verified == False
+        ).order_by(VideoAuditIncident.timestamp_seconds).limit(10).all()
+
+        if not incidents:
+            return
+
+        audit_dir = os.path.dirname(video_path)
+        logger.info(f"Running post-scan VLM verification pass on {len(incidents)} flagged keyframes for audit {audit_id}...")
+
+        verified_count = 0
+        for inc in incidents:
+            if not inc.snapshot_path:
+                continue
+            snapshot_abs = os.path.join(audit_dir, inc.snapshot_path)
+            if not os.path.isfile(snapshot_abs):
+                continue
+
+            try:
+                res = vlm.analyze_image_file_sync(snapshot_abs)
+                if res.description or res.inference_time_ms > 0:
+                    analysis_dict = {
+                        "phone_detected": res.phone_detected,
+                        "cheating_detected": res.cheating_detected,
+                        "talking_detected": res.talking_detected,
+                        "earbud_detected": res.earbud_detected,
+                        "peeking_detected": res.peeking_detected,
+                        "detected_objects": res.detected_objects,
+                        "description": res.description or "VLM evaluation complete.",
+                        "confidence": res.confidence,
+                        "inference_time_ms": res.inference_time_ms,
+                        "model": vlm.model
+                    }
+                    inc.vlm_verified = True
+                    inc.vlm_analysis = json.dumps(analysis_dict)
+                    verified_count += 1
+            except Exception as e:
+                logger.debug(f"VLM post-scan analysis failed for incident {inc.incident_id}: {e}")
+
+        if verified_count > 0:
+            db.commit()
+            logger.info(f"VLM post-scan verification completed for {verified_count} incidents on audit {audit_id}")
+
+    @staticmethod
+    async def verify_incident_vlm(audit_id: str, incident_id: str, db: Session) -> Dict[str, Any]:
+        """Verify an individual incident on-demand using VLM (async)."""
+        incident = db.query(VideoAuditIncident).filter(
+            VideoAuditIncident.incident_id == incident_id,
+            VideoAuditIncident.audit_id == audit_id
+        ).first()
+        if not incident:
+            raise ValueError(f"Incident {incident_id} not found in audit {audit_id}")
+
+        audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+        if not audit:
+            raise ValueError(f"Audit {audit_id} not found")
+
+        audit_dir = os.path.dirname(audit.video_path)
+        snapshot_abs = os.path.join(audit_dir, incident.snapshot_path or "")
+        if not os.path.isfile(snapshot_abs):
+            raise FileNotFoundError(f"Evidence snapshot file not found at: {snapshot_abs}")
+
+        vlm = get_vlm_client()
+        res = await vlm.analyze_image_file(snapshot_abs)
+
+        analysis_dict = {
+            "phone_detected": res.phone_detected,
+            "cheating_detected": res.cheating_detected,
+            "talking_detected": res.talking_detected,
+            "earbud_detected": res.earbud_detected,
+            "peeking_detected": res.peeking_detected,
+            "detected_objects": res.detected_objects,
+            "description": res.description or "VLM inspection complete.",
+            "confidence": res.confidence,
+            "inference_time_ms": res.inference_time_ms,
+            "model": vlm.model
+        }
+
+        incident.vlm_verified = True
+        incident.vlm_analysis = json.dumps(analysis_dict)
+        db.commit()
+
+        return {
+            "incident_id": incident.incident_id,
+            "vlm_verified": True,
+            "vlm_analysis": analysis_dict,
+            "message": "VLM verification complete."
+        }
+
+    @staticmethod
+    async def verify_all_incidents_vlm(audit_id: str, db: Session) -> Dict[str, Any]:
+        """Batch-verifies all unverified incidents for an audit session."""
+        incidents = db.query(VideoAuditIncident).filter(
+            VideoAuditIncident.audit_id == audit_id
+        ).all()
+        verified_count = 0
+        for inc in incidents:
+            try:
+                await VideoAuditService.verify_incident_vlm(audit_id, inc.incident_id, db)
+                verified_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to verify incident {inc.incident_id} with VLM: {e}")
+        return {
+            "audit_id": audit_id,
+            "total_incidents": len(incidents),
+            "verified_count": verified_count,
+            "message": f"Successfully verified {verified_count} of {len(incidents)} incidents with VLM."
+        }
+

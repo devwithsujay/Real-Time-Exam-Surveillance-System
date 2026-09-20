@@ -36,7 +36,8 @@ from app.schemas import (
     ConfigResponse, ConfigUpdateRequest,
     UserLogin, TokenResponse, UserResponse, UserCreate, UserUpdate,
     PendingActionResponse, PendingActionApproveRequest,
-    VideoAuditListItemResponse, VideoAuditDetailResponse, VideoAuditIncidentResponse
+    VideoAuditListItemResponse, VideoAuditDetailResponse, VideoAuditIncidentResponse,
+    VideoAuditVLMVerificationResponse
 )
 from app.services.video_audit_service import VideoAuditService
 from app.services.video_audit_report import generate_video_audit_pdf
@@ -1439,6 +1440,49 @@ def download_video_audit_report(
     except Exception as e:
         logger.exception(f"Failed to generate video audit PDF: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate audit report: {e}")
+
+
+@app.post("/api/v1/video-audit/{audit_id}/incidents/{incident_id}/vlm-verify", response_model=VideoAuditVLMVerificationResponse)
+async def verify_video_audit_incident_vlm(
+    audit_id: str,
+    incident_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auditor_or_admin)
+):
+    """
+    On-demand VLM forensic inspection of a specific flagged incident keyframe.
+    Accessible to Auditors and Admins.
+    """
+    try:
+        result = await VideoAuditService.verify_incident_vlm(audit_id, incident_id, db)
+        return VideoAuditVLMVerificationResponse(**result)
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"VLM verification failed for incident {incident_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"VLM inspection error: {e}")
+
+
+@app.post("/api/v1/video-audit/{audit_id}/vlm-verify-all")
+async def verify_all_video_audit_incidents_vlm(
+    audit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Batch-verifies all flagged incidents in an audit session using VLM.
+    Restricted to Admins.
+    """
+    audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Video audit not found")
+
+    try:
+        result = await VideoAuditService.verify_all_incidents_vlm(audit_id, db)
+        return result
+    except Exception as e:
+        logger.exception(f"Batch VLM verification failed for audit {audit_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch VLM error: {e}")
 
 
 @app.delete("/api/v1/video-audit/{audit_id}")

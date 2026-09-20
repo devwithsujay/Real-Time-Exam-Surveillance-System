@@ -228,6 +228,8 @@ class VideoAuditIncident(Base):
     track_id = Column(Integer, default=0)
     bbox = Column(Text, nullable=True)  # JSON [x1, y1, x2, y2]
     snapshot_path = Column(String(500), nullable=True)
+    vlm_verified = Column(Boolean, default=False)
+    vlm_analysis = Column(Text, nullable=True)  # JSON serialized VLM result
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     audit = relationship("VideoAudit", back_populates="incidents")
