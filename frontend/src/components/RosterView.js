@@ -248,7 +248,7 @@ function RosterView({
       )}
 
       {/* Attendance Telemetry Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-shrink-0">
         <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-3xl p-4 flex flex-col justify-between shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between text-xs text-[#86868b] mb-1 font-medium uppercase tracking-wider text-[11px]">
             <span className="truncate mr-1">Enrolled</span>
@@ -287,17 +287,17 @@ function RosterView({
       </div>
 
       {/* Attendance Progress Bar */}
-      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-3xl p-4 shadow-xs">
-        <div className="flex justify-between items-center text-xs mb-2">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl p-3 sm:p-3.5 shadow-xs flex-shrink-0">
+        <div className="flex justify-between items-center text-xs mb-1.5">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#1d1d1f] dark:text-white">Attendance Progress</span>
+            <span className="font-semibold text-[#1d1d1f] dark:text-white text-xs">Attendance Progress</span>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#34c759]/10 text-[#34c759] font-medium">
               {checkedInCount} of {totalEnrolled} Verified ({attendanceRate}%)
             </span>
           </div>
-          <span className="text-[#86868b] text-xs">{pendingCount} remaining</span>
+          <span className="text-[#86868b] text-[11px] font-mono">{pendingCount} remaining</span>
         </div>
-        <div className="w-full bg-black/5 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+        <div className="w-full bg-black/5 dark:bg-white/10 rounded-full h-1.5 overflow-hidden">
           <div
             className="bg-[#34c759] h-full rounded-full transition-all duration-300"
             style={{ width: `${attendanceRate}%` }}
@@ -344,74 +344,19 @@ function RosterView({
           ))}
         </div>
 
-        {/* Top Pagination Toolbar */}
-        <div 
-          onWheel={handlePaginationWheel}
-          className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0"
-        >
-          <div className="flex items-center gap-1.5 text-xs text-[#86868b] bg-white dark:bg-[#1c1c1e] px-2.5 py-1 rounded-2xl border border-black/[0.08] dark:border-white/[0.08]">
-            <span>Show:</span>
-            <select
-              value={itemsPerPage}
-              onChange={(e) => {
-                setItemsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="bg-transparent border-none text-[#1d1d1f] dark:text-white text-xs focus:outline-none cursor-pointer"
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1 bg-white dark:bg-[#1c1c1e] p-1 rounded-2xl border border-black/[0.08] dark:border-white/[0.08]">
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="First Page"
-            >
-              <ChevronsLeft size={13} />
-            </button>
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="Previous Page"
-            >
-              <ChevronLeft size={13} />
-            </button>
-            <span className="px-2 text-xs text-[#86868b] font-medium">
-              {currentPage} of {totalPages || 1}
-            </span>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="Next Page"
-            >
-              <ChevronRight size={13} />
-            </button>
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="Last Page"
-            >
-              <ChevronsRight size={13} />
-            </button>
-          </div>
+        {/* Candidate Count Badge */}
+        <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0 text-xs text-[#86868b] dark:text-[#a1a1a6]">
+          <span className="font-mono bg-black/5 dark:bg-white/10 px-3 py-1.5 rounded-full text-[11px] font-medium">
+            {filteredParticipants.length} Candidate{filteredParticipants.length !== 1 ? 's' : ''} Listed
+          </span>
         </div>
       </div>
 
       {/* Participants Directory Table (macOS Grouped Style) */}
-      <div className="rounded-3xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] flex flex-col bg-white dark:bg-[#1c1c1e]">
-        <div className="overflow-x-auto overflow-y-auto max-h-[520px] min-h-[160px]">
+      <div className="rounded-3xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] flex-1 min-h-[350px] flex flex-col bg-white dark:bg-[#1c1c1e]">
+        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
           <table className="w-full text-left text-xs text-[#1d1d1f] dark:text-[#f5f5f7] border-collapse">
-            <thead className="sticky top-0 z-20 bg-black/[0.02] dark:bg-white/[0.02] backdrop-blur-md border-b border-black/[0.06] dark:border-white/[0.06]">
+            <thead className="sticky top-0 z-20 bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-md border-b border-black/[0.06] dark:border-white/[0.06]">
               <tr className="text-[11px] text-[#86868b] uppercase tracking-wider font-medium">
                 <th className="px-5 py-3 font-medium">Candidate</th>
                 <th className="px-5 py-3 font-medium">Roll Number</th>
@@ -571,7 +516,7 @@ function RosterView({
         {filteredParticipants.length > 0 && (
           <div 
             onWheel={handlePaginationWheel}
-            className="sticky bottom-0 z-20 px-6 py-3.5 border-t border-black/5 dark:border-white/5 bg-[#fbfbfd]/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
+            className="flex-shrink-0 mt-auto px-6 py-3.5 border-t border-black/5 dark:border-white/5 bg-[#fbfbfd]/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
           >
             <div className="text-[#86868b] dark:text-[#a1a1a6] font-medium">
               Showing <span className="font-semibold text-[#1d1d1f] dark:text-white">{Math.min(filteredParticipants.length, (currentPage - 1) * itemsPerPage + 1)}</span>–<span className="font-semibold text-[#1d1d1f] dark:text-white">{Math.min(filteredParticipants.length, currentPage * itemsPerPage)}</span> of <span className="font-semibold text-[#0071e3]">{filteredParticipants.length}</span> candidates
