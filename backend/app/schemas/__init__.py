@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
-from app.models import ExamStatus, EventSeverity, EventType, ParticipantStatus, UserRole, ActionStatus
+from app.models import (
+    ExamStatus, EventSeverity, EventType, ParticipantStatus, UserRole, ActionStatus, VideoAuditStatus
+)
 
 
 # Exam Schemas
@@ -305,3 +307,47 @@ class PendingActionApproveRequest(BaseModel):
     approved: bool  # True to execute, False to reject
 
 
+# Video Audit Schemas (Phase 6)
+class VideoAuditIncidentResponse(BaseModel):
+    incident_id: str
+    audit_id: str
+    timestamp_seconds: float
+    frame_index: int
+    event_type: EventType
+    severity: EventSeverity
+    confidence: float
+    description: Optional[str] = None
+    track_id: int = 0
+    bbox: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VideoAuditListItemResponse(BaseModel):
+    audit_id: str
+    title: str
+    filename: str
+    file_size_bytes: int
+    duration_seconds: float
+    fps: float
+    total_frames: int
+    processed_frames: int
+    sample_fps: int
+    progress_percent: float
+    status: VideoAuditStatus
+    risk_score: float
+    total_violations: int
+    error_message: Optional[str] = None
+    uploaded_by: Optional[str] = None
+    exam_id: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VideoAuditDetailResponse(VideoAuditListItemResponse):
+    incidents: List[VideoAuditIncidentResponse] = []

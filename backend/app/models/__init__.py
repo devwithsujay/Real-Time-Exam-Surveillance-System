@@ -175,4 +175,64 @@ class PendingAction(Base):
     resolved_at = Column(DateTime, nullable=True)
 
 
+class VideoAuditStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
+
+class VideoAudit(Base):
+    __tablename__ = "video_audits"
+
+    audit_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=False)
+    video_path = Column(String(500), nullable=False)
+    file_size_bytes = Column(Integer, default=0)
+    duration_seconds = Column(Float, default=0.0)
+    fps = Column(Float, default=0.0)
+    total_frames = Column(Integer, default=0)
+    processed_frames = Column(Integer, default=0)
+    sample_fps = Column(Integer, default=2)
+    progress_percent = Column(Float, default=0.0)
+    status = Column(SQLEnum(VideoAuditStatus), default=VideoAuditStatus.PENDING, nullable=False)
+    risk_score = Column(Float, default=0.0)
+    total_violations = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    uploaded_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    exam_id = Column(String(36), ForeignKey("exams.exam_id"), nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    incidents = relationship("VideoAuditIncident", back_populates="audit", cascade="all, delete-orphan", order_by="VideoAuditIncident.timestamp_seconds")
+
+    __table_args__ = (
+        Index("idx_video_audit_status", "status"),
+        Index("idx_video_audit_created", "created_at"),
+    )
+
+
+class VideoAuditIncident(Base):
+    __tablename__ = "video_audit_incidents"
+
+    incident_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    audit_id = Column(String(36), ForeignKey("video_audits.audit_id"), nullable=False)
+    timestamp_seconds = Column(Float, nullable=False)
+    frame_index = Column(Integer, nullable=False)
+    event_type = Column(SQLEnum(EventType), nullable=False)
+    severity = Column(SQLEnum(EventSeverity), nullable=False)
+    confidence = Column(Float, default=0.0)
+    description = Column(Text)
+    track_id = Column(Integer, default=0)
+    bbox = Column(Text, nullable=True)  # JSON [x1, y1, x2, y2]
+    snapshot_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    audit = relationship("VideoAudit", back_populates="incidents")
+
+    __table_args__ = (
+        Index("idx_incident_audit_time", "audit_id", "timestamp_seconds"),
+        Index("idx_incident_type_sev", "event_type", "severity"),
+    )

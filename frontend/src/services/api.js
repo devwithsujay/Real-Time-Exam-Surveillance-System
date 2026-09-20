@@ -148,6 +148,31 @@ export const api = {
   system: {
     health: () => request('/health'),
     cameras: () => request('/health/cameras'),
+  },
+
+  // Video Forensic Audit (Phase 6)
+  videoAudit: {
+    list: () => request('/api/v1/video-audit'),
+    get: (auditId) => request(`/api/v1/video-audit/${auditId}`),
+    upload: async (formData) => {
+      const token = localStorage.getItem('ess_token');
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/video-audit/upload`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Upload failed (${res.status}): ${err}`);
+      }
+      return res.json();
+    },
+    delete: (auditId) => request(`/api/v1/video-audit/${auditId}`, { method: 'DELETE' }),
+    streamUrl: (auditId) => `${API_BASE}/api/v1/video-audit/${auditId}/stream`,
+    snapshotUrl: (auditId, filename) => `${API_BASE}/api/v1/video-audit/${auditId}/snapshots/${filename}`,
+    downloadReport: (auditId) => request(`/api/v1/video-audit/${auditId}/report`, { asBlob: true }),
   }
 };
 

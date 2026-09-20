@@ -7,17 +7,17 @@ This document outlines the architectural roadmap and concrete step-by-step imple
 ## 📋 High-Level Roadmap Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                ARGUS SCALING ROADMAP                                    │
-├─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┤
-│     PHASE 1     │     PHASE 2     │     PHASE 3     │     PHASE 4     │     PHASE 5     │
-│   PostgreSQL    │  Decoupled AI   │ WebRTC Video    │ Acoustic AI &   │ Cloud-Native    │
-│  & Alembic DB   │ Inference Queue │ Streaming (SFU) │ Whisper VAD     │ K8s Auto-Scale  │
-├─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┤
-│ High-throughput │ Offload GPU     │ H.264/AV1       │ Real-time voice │ Multi-node Helm │
-│ relational pool │ workers to      │ sub-150ms       │ transcription & │ clustering with │
-│ with migrations │ Celery/Redis    │ streaming       │ whisper alert   │ KEDA & Grafana  │
-└─────────────────┴─────────────────┴─────────────────┴─────────────────┴─────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                           ARGUS SCALING ROADMAP                                           │
+├─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┤
+│     PHASE 1     │     PHASE 2     │     PHASE 3     │     PHASE 4     │     PHASE 5     │     PHASE 6     │
+│   PostgreSQL    │  Decoupled AI   │ WebRTC Video    │ Acoustic AI &   │ Cloud-Native    │ Pre-Recorded    │
+│  & Alembic DB   │ Inference Queue │ Streaming (SFU) │ Whisper VAD     │ K8s Auto-Scale  │ Video Audit     │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┤
+│ High-throughput │ Offload GPU     │ H.264/AV1       │ Real-time voice │ Multi-node Helm │ Accelerated 5x  │
+│ relational pool │ workers to      │ sub-150ms       │ transcription & │ clustering with │ scan, heatmap   │
+│ with migrations │ Celery/Redis    │ streaming       │ whisper alert   │ KEDA & Grafana  │ & video scrub   │
+└─────────────────┴─────────────────┴─────────────────┴─────────────────┴─────────────────┴─────────────────┘
 ```
 
 ---
@@ -267,6 +267,65 @@ Deploying across multiple institutional data centers requires container orchestr
 
 ---
 
+## Phase 6: Forensic Pre-Recorded Exam Video Analysis & Heatmap Timeline Engine
+
+### Problem & Objective
+Universities, certification bodies, and remote testing platforms frequently record exam sessions offline or via local screen/webcam capture. Manually re-watching hundreds of hours of recorded footage is infeasible for human invigilators. ARGUS requires an accelerated, asynchronous video forensic auditing pipeline that scans pre-recorded videos (`.mp4`, `.webm`, `.avi`, `.mov`) at 3x–10x real-time speed, generates an interactive timecode-indexed incident heatmap, and auto-produces legal forensic dossiers.
+
+### Implementation Checklist
+- [x] Implement `VideoAudit` ORM model & migration for tracking job status, progress %, sample FPS, and risk scores.
+- [x] Add `POST /api/v1/video-audit/upload` with chunked upload support and mime-type validation.
+- [x] Build `VideoAuditService` running OpenCV `cv2.VideoCapture` with configurable frame skipping (2–5 FPS sampling).
+- [x] Feed sampled frames into existing `DetectionEngine` (YOLOv8) and `MediaPipeAnalyzer` with relative video timecode mapping (`video_timestamp_sec`).
+- [x] Integrate local VLM (`LMStudioVLM` / Qwen3-VL) deep inspection on candidate violation keyframes.
+- [x] Save high-resolution evidentiary snapshots with bounding boxes into `data/video_audits/<audit_id>/snapshots/`.
+- [x] Expose HTTP byte-range video streaming endpoint for seamless HTML5 player timecode seeking.
+- [x] Build frontend `VideoAuditDesk` featuring drag-and-drop video upload, active processing progress bar, and an interactive video player with a clickable incident scrub bar (jumping immediately to the violation timecode).
+- [x] Integrate 1-click ReportLab PDF compliance dossier export for audited sessions.
+
+### Step-by-Step Implementation Guide
+
+1. **Video Audit Service Core Loop (`backend/app/services/video_audit_service.py`)**:
+   ```python
+   import cv2
+   from app.services.detection_engine import DetectionEngine
+   from app.services.mediapipe_analyzer import MediaPipeAnalyzer
+
+   def process_exam_recording(video_path: str, sample_fps: int = 2):
+       cap = cv2.VideoCapture(video_path)
+       fps_source = cap.get(cv2.CAP_PROP_FPS) or 30.0
+       total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+       step = max(1, int(fps_source / sample_fps))
+       frame_idx = 0
+       violations = []
+
+       while cap.isOpened():
+           ret, frame = cap.read()
+           if not ret:
+               break
+           
+           if frame_idx % step == 0:
+               time_sec = frame_idx / fps_source
+               # Run YOLOv8 detection & MediaPipe gaze heuristics
+               detections = detection_engine.track(frame, frame_idx)
+               # If anomaly detected, log time_sec and save keyframe snapshot
+           frame_idx += 1
+       cap.release()
+   ```
+
+2. **Interactive Incident Scrub Bar (`frontend/src/components/VideoAuditView.js`)**:
+   ```jsx
+   // Sync HTML5 video currentTime with incident markers on scrub bar
+   const seekToIncident = (timestampSec) => {
+     if (videoRef.current) {
+       videoRef.current.currentTime = timestampSec;
+       videoRef.current.play();
+     }
+   };
+   ```
+
+---
+
 ## 🎯 Implementation Priority Matrix
 
 | Phase | Upgrade | Business Impact | Technical Complexity | Recommended Timeline |
@@ -276,3 +335,5 @@ Deploying across multiple institutional data centers requires container orchestr
 | **3** | LiveKit WebRTC Streaming | Cuts streaming bandwidth by 70% | High | Sprint 3 |
 | **4** | Whisper Audio Transcription | Eliminates ambient noise false alarms | Moderate | Sprint 4 |
 | **5** | Kubernetes Helm + KEDA | Elastic multi-institution scaling | High | Sprint 5 |
+| **6** | Pre-Recorded Video Audit | Retroactive exam grading & 10x faster human audit | Moderate | Sprint 6 |
+

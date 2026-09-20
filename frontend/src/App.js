@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Camera, AlertTriangle, Users, Activity, Bell, ChevronLeft,
-  X, Play, Pause, Download, Shield, LogOut, Sun, Moon
+  X, Play, Pause, Download, Shield, LogOut, Sun, Moon, Film
 } from 'lucide-react';
 import ExamMonitor from './components/ExamMonitor';
 import AlertPanel from './components/AlertPanel';
@@ -9,6 +9,7 @@ import AnalyticsBoard from './components/AnalyticsBoard';
 import EventTimeline from './components/EventTimeline';
 import IncidentViewer from './components/IncidentViewer';
 import RosterView from './components/RosterView';
+import VideoAuditDesk from './components/VideoAuditDesk';
 import CreateExamModal from './components/CreateExamModal';
 import LoginModal from './components/LoginModal';
 import StaffManagementModal from './components/StaffManagementModal';
@@ -19,6 +20,7 @@ const WS_BASE = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
 
 function SurveillanceDashboard() {
   const { user, token, logout, isAdmin, isProctor } = useAuth();
+  const isAuditor = user?.role === 'AUDITOR' || isAdmin;
 
   const [exam, setExam] = useState(null);
   const [examsList, setExamsList] = useState([]);
@@ -316,7 +318,8 @@ function SurveillanceDashboard() {
     { id: 'alerts', label: 'Alerts & Anomalies', icon: AlertTriangle, count: alerts.length },
     { id: 'analytics', label: 'Telemetry & Analytics', icon: Activity },
     { id: 'events', label: 'Audit Timeline', icon: Bell, count: events.length },
-    { id: 'incidents', label: 'Forensic Dossier', icon: Shield }
+    { id: 'incidents', label: 'Forensic Dossier', icon: Shield },
+    ...(isAuditor ? [{ id: 'videoAudit', label: 'Video Forensic Audit', icon: Film }] : [])
   ];
 
   const roleBadgeStyle = user?.role === 'ADMIN'
@@ -642,7 +645,9 @@ function SurveillanceDashboard() {
             </div>
           )}
 
-          {!exam ? (
+          {activeTab === 'videoAudit' ? (
+            <VideoAuditDesk user={user} exam={exam} />
+          ) : !exam ? (
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-3xl p-8 sm:p-10 max-w-md text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_16px_40px_rgb(0,0,0,0.4)]">
                 <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-[#0071e3]/10 dark:bg-[#0071e3]/20 flex items-center justify-center text-[#0071e3]">

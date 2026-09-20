@@ -1,12 +1,13 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status, Body
+from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status, Body, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, List, Dict, Any
 import os
+import shutil
 import uuid
 from uuid import UUID
 from datetime import datetime, timezone
@@ -24,7 +25,7 @@ from app.config import get_settings
 from app.database import init_db, get_db, engine
 from app.models import (
     Base, Exam, Participant, Event, ExamStatus, ParticipantStatus, EventType, EventSeverity,
-    User, UserRole, PendingAction, ActionStatus
+    User, UserRole, PendingAction, ActionStatus, VideoAudit, VideoAuditIncident, VideoAuditStatus
 )
 from app.schemas import (
     ExamCreate, ExamUpdate, ExamResponse, ExamStartResponse, ExamEndResponse,
@@ -34,8 +35,11 @@ from app.schemas import (
     WSMessageType, WSAlertPayload, WSAnalyticsPayload,
     ConfigResponse, ConfigUpdateRequest,
     UserLogin, TokenResponse, UserResponse, UserCreate, UserUpdate,
-    PendingActionResponse, PendingActionApproveRequest
+    PendingActionResponse, PendingActionApproveRequest,
+    VideoAuditListItemResponse, VideoAuditDetailResponse, VideoAuditIncidentResponse
 )
+from app.services.video_audit_service import VideoAuditService
+from app.services.video_audit_report import generate_video_audit_pdf
 from app.crud import (
     utcnow,
     create_exam, get_exam, get_exams, update_exam, start_exam, end_exam, delete_exam,
@@ -343,8 +347,9 @@ async def lifespan(app: FastAPI):
     anomaly_detector = AnomalyDetector()
     event_logger = EventLogger()
 
-    vlm = LMStudioVLM()
-    await vlm.initialize()
+    vlm_instance = LMStudioVLM()
+    await vlm_instance.initialize()
+    vlm = vlm_instance
 
     if settings.ENABLE_AUDIO_ANALYSIS and audio_level_service.start():
         logger.info("Audio level service started")
@@ -1212,6 +1217,255 @@ async def select_vlm_model(
         "active_model": vlm.model,
         "updated_by": current_user.username
     }
+
+
+# ==============================================================================
+# PHASE 6: Forensic Pre-Recorded Exam Video Analysis & Heatmap Timeline Engine
+# ==============================================================================
+
+def _stream_video_range(request: Request, file_path: str, content_type: str = "video/mp4"):
+    """HTTP Byte-Range partial content streamer for HTML5 video player."""
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    file_size = os.path.getsize(file_path)
+    range_header = request.headers.get("range")
+
+    if not range_header:
+        def iter_full():
+            with open(file_path, "rb") as f:
+                while chunk := f.read(64 * 1024):
+                    yield chunk
+        return StreamingResponse(
+            iter_full(),
+            headers={
+                "Content-Length": str(file_size),
+                "Accept-Ranges": "bytes",
+                "Content-Type": content_type
+            },
+            media_type=content_type
+        )
+
+    range_val = range_header.strip().lower()
+    if not range_val.startswith("bytes="):
+        raise HTTPException(status_code=416, detail="Invalid Range header")
+
+    range_str = range_val[6:]
+    parts = range_str.split("-")
+    start = int(parts[0]) if parts[0] else 0
+    end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
+
+    if start >= file_size or end >= file_size or start > end:
+        raise HTTPException(status_code=416, detail="Requested range not satisfiable")
+
+    content_length = end - start + 1
+
+    def iter_range():
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            bytes_left = content_length
+            while bytes_left > 0:
+                read_size = min(64 * 1024, bytes_left)
+                data = f.read(read_size)
+                if not data:
+                    break
+                bytes_left -= len(data)
+                yield data
+
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(content_length),
+        "Content-Type": content_type,
+    }
+    return StreamingResponse(iter_range(), status_code=206, headers=headers, media_type=content_type)
+
+
+@app.post("/api/v1/video-audit/upload", response_model=VideoAuditListItemResponse, status_code=201)
+async def upload_video_for_audit(
+    video_file: UploadFile = File(...),
+    title: str = Form("Pre-Recorded Exam Audit"),
+    sample_fps: int = Form(2),
+    exam_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Upload an exam recording file and launch forensic AI audit.
+    STRICTLY RESTRICTED TO ADMINISTRATORS (require_admin).
+    """
+    allowed_exts = (".mp4", ".webm", ".avi", ".mov", ".mkv")
+    orig_name = video_file.filename or "recording.mp4"
+    _, ext = os.path.splitext(orig_name.lower())
+    if ext not in allowed_exts:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported media format '{ext}'. Allowed: {', '.join(allowed_exts)}"
+        )
+
+    audit_id = str(uuid.uuid4())
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "video_audits", audit_id)
+    os.makedirs(data_dir, exist_ok=True)
+
+    saved_video_path = os.path.join(data_dir, f"video{ext}")
+    file_size = 0
+    try:
+        with open(saved_video_path, "wb") as buffer:
+            while chunk := await video_file.read(1024 * 1024):  # 1MB chunks
+                file_size += len(chunk)
+                buffer.write(chunk)
+    except Exception as e:
+        if os.path.exists(data_dir):
+            shutil.rmtree(data_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save video: {e}")
+
+    try:
+        meta = VideoAuditService.extract_metadata(saved_video_path)
+    except Exception as e:
+        if os.path.exists(data_dir):
+            shutil.rmtree(data_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=f"Invalid or corrupted video file: {e}")
+
+    audit = VideoAudit(
+        audit_id=audit_id,
+        title=title,
+        filename=orig_name,
+        video_path=saved_video_path,
+        file_size_bytes=file_size,
+        duration_seconds=meta["duration_seconds"],
+        fps=meta["fps"],
+        total_frames=meta["total_frames"],
+        sample_fps=max(1, min(10, sample_fps)),
+        status=VideoAuditStatus.PENDING,
+        uploaded_by=current_user.user_id,
+        exam_id=exam_id if exam_id else None,
+        created_at=utcnow()
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(audit)
+
+    # Launch processing in background thread
+    VideoAuditService.run_audit_background(audit_id)
+    logger.info(f"Video audit {audit_id} created by admin '{current_user.username}'. Processing started.")
+
+    return audit
+
+
+@app.get("/api/v1/video-audit", response_model=List[VideoAuditListItemResponse])
+def list_video_audits(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auditor_or_admin)
+):
+    """List all pre-recorded video forensic audits. Restricted to Admin and Auditor."""
+    return db.query(VideoAudit).order_by(VideoAudit.created_at.desc()).all()
+
+
+@app.get("/api/v1/video-audit/{audit_id}", response_model=VideoAuditDetailResponse)
+def get_video_audit_detail(
+    audit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auditor_or_admin)
+):
+    """Fetch complete details, timecode heatmap coordinates, and incidents for an audit."""
+    audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Video audit not found")
+    return audit
+
+
+@app.get("/api/v1/video-audit/{audit_id}/stream")
+def stream_audit_video(
+    audit_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """HTTP Byte-Range partial video stream for HTML5 player seeking."""
+    audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+    if not audit or not os.path.exists(audit.video_path):
+        raise HTTPException(status_code=404, detail="Video source not found")
+
+    ext = os.path.splitext(audit.video_path)[1].lower()
+    content_type = "video/mp4" if ext == ".mp4" else "video/webm" if ext == ".webm" else "video/octet-stream"
+    return _stream_video_range(request, audit.video_path, content_type)
+
+
+@app.get("/api/v1/video-audit/{audit_id}/snapshots/{filename}")
+def get_audit_snapshot(
+    audit_id: str,
+    filename: str,
+    db: Session = Depends(get_db)
+):
+    """Serve evidentiary keyframe snapshots captured during video audit."""
+    audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+
+    safe_filename = os.path.basename(filename)
+    audit_dir = os.path.dirname(audit.video_path)
+    snap_path = os.path.join(audit_dir, "snapshots", safe_filename)
+
+    if not os.path.exists(snap_path):
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    return FileResponse(snap_path, media_type="image/jpeg")
+
+
+@app.get("/api/v1/video-audit/{audit_id}/report")
+def download_video_audit_report(
+    audit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auditor_or_admin)
+):
+    """Generate and download ReportLab PDF forensic compliance dossier for this video audit."""
+    audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+
+    incidents = db.query(VideoAuditIncident).filter(
+        VideoAuditIncident.audit_id == audit_id
+    ).order_by(VideoAuditIncident.timestamp_seconds).all()
+
+    audit_dir = os.path.dirname(audit.video_path)
+    try:
+        pdf_bytes = generate_video_audit_pdf(audit, incidents, audit_dir)
+        safe_title = "".join(c for c in audit.title if c.isalnum() or c in ("-", "_")).strip() or "video_audit"
+        filename = f"ARGUS_Audit_Dossier_{safe_title}_{audit_id[:8]}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.exception(f"Failed to generate video audit PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate audit report: {e}")
+
+
+@app.delete("/api/v1/video-audit/{audit_id}")
+def delete_video_audit(
+    audit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Delete a video audit record, source video, and evidence snapshots.
+    STRICTLY RESTRICTED TO ADMINISTRATORS (require_admin).
+    """
+    audit = db.query(VideoAudit).filter(VideoAudit.audit_id == audit_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Video audit not found")
+
+    audit_dir = os.path.dirname(audit.video_path)
+    db.delete(audit)
+    db.commit()
+
+    if os.path.exists(audit_dir):
+        try:
+            shutil.rmtree(audit_dir, ignore_errors=True)
+        except Exception as e:
+            logger.warning(f"Could not remove audit directory {audit_dir}: {e}")
+
+    return {"status": "DELETED", "audit_id": audit_id}
 
 
 @app.websocket("/ws/exam/{exam_id}")
