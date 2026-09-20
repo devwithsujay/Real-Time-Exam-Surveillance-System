@@ -64,14 +64,14 @@ export default function VideoAuditDesk({ user, exam }) {
   const [verifyingIncidentId, setVerifyingIncidentId] = useState(null);
   const [batchVerifying, setBatchVerifying] = useState(false);
 
-  // Fetch all audits
-  const fetchAudits = useCallback(async () => {
+  // Fetch all audits (initial load or manual sync)
+  const fetchAudits = useCallback(async (autoSelectFirst = false) => {
     try {
       setLoading(true);
       const data = await api.videoAudit.list();
       setAudits(data || []);
-      if (data && data.length > 0 && !selectedAuditId) {
-        setSelectedAuditId(data[0].audit_id);
+      if (autoSelectFirst && data && data.length > 0) {
+        setSelectedAuditId((prev) => prev || data[0].audit_id);
       }
     } catch (err) {
       console.error('Failed to fetch video audits:', err);
@@ -79,36 +79,97 @@ export default function VideoAuditDesk({ user, exam }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedAuditId]);
+  }, []);
 
+  // Initial load on mount
   useEffect(() => {
-    fetchAudits();
+    fetchAudits(true);
   }, [fetchAudits]);
 
-  // Poll active audit if status is PROCESSING or PENDING
+  // Fetch full details of the currently selected audit whenever selectedAuditId changes
   useEffect(() => {
-    if (!selectedAuditId) return;
+    if (!selectedAuditId) {
+      setSelectedAudit(null);
+      return;
+    }
 
-    let timer = null;
-    const fetchAuditDetail = async () => {
+    let isMounted = true;
+    const loadDetail = async () => {
       try {
         const detail = await api.videoAudit.get(selectedAuditId);
-        setSelectedAudit(detail);
-
-        // Keep polling every 2s if still processing
-        if (detail.status === 'PROCESSING' || detail.status === 'PENDING') {
-          timer = setTimeout(fetchAuditDetail, 2000);
+        if (isMounted) {
+          setSelectedAudit(detail);
         }
       } catch (err) {
         console.error('Failed to fetch audit detail:', err);
       }
     };
 
-    fetchAuditDetail();
+    loadDetail();
     return () => {
-      if (timer) clearTimeout(timer);
+      isMounted = false;
     };
   }, [selectedAuditId]);
+
+  // Real-Time Polling Engine:
+  // Automatically activates whenever ANY audit in the archives is PROCESSING or PENDING.
+  // Silently syncs both the Audit Archives sidebar and the active inspection desk every 1.5s
+  // so progress bars, frame counts, and completion statuses update in real time without menu switching.
+  const hasProcessingAudit = audits.some(
+    (a) => a.status === 'PROCESSING' || a.status === 'PENDING'
+  ) || (selectedAudit && (selectedAudit.status === 'PROCESSING' || selectedAudit.status === 'PENDING'));
+
+  useEffect(() => {
+    if (!hasProcessingAudit) return;
+
+    let timer = null;
+    let isMounted = true;
+
+    const poll = async () => {
+      try {
+        // 1. Silently update archives list so sidebar progress bars & completion badges update
+        const freshList = await api.videoAudit.list();
+        if (!isMounted) return;
+        setAudits(freshList || []);
+
+        // 2. If the currently selected audit is processing (or was processing), update its detailed stats
+        if (selectedAuditId) {
+          const matching = freshList?.find((a) => a.audit_id === selectedAuditId);
+          if (
+            !matching ||
+            matching.status === 'PROCESSING' ||
+            matching.status === 'PENDING' ||
+            matching.status === 'COMPLETED'
+          ) {
+            const detail = await api.videoAudit.get(selectedAuditId);
+            if (!isMounted) return;
+            setSelectedAudit(detail);
+          }
+        }
+
+        // 3. Determine if any audit is still in-flight
+        const stillActive =
+          freshList?.some((a) => a.status === 'PROCESSING' || a.status === 'PENDING') ||
+          (selectedAuditId && freshList?.find((a) => a.audit_id === selectedAuditId)?.status === 'PROCESSING');
+
+        if (stillActive && isMounted) {
+          timer = setTimeout(poll, 1500);
+        }
+      } catch (err) {
+        console.error('Real-time audit sync poll error:', err);
+        if (isMounted) {
+          timer = setTimeout(poll, 3000);
+        }
+      }
+    };
+
+    timer = setTimeout(poll, 1500);
+
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [hasProcessingAudit, selectedAuditId]);
 
   // Handle Video Upload
   const handleUploadSubmit = async (e) => {
@@ -134,10 +195,11 @@ export default function VideoAuditDesk({ user, exam }) {
       setShowUploadModal(false);
       setUploadFile(null);
       setUploadTitle('');
-      await fetchAudits();
       if (res?.audit_id) {
         setSelectedAuditId(res.audit_id);
       }
+      // Silently refresh list to pick up the new PENDING/PROCESSING audit immediately
+      await fetchAudits(false);
     } catch (err) {
       console.error('Upload failed:', err);
       setUploadError(err.message || 'Upload failed');
@@ -214,7 +276,7 @@ export default function VideoAuditDesk({ user, exam }) {
       await api.videoAudit.delete(auditId);
       setSelectedAudit(null);
       setSelectedAuditId(null);
-      await fetchAudits();
+      await fetchAudits(true);
     } catch (err) {
       console.error('Failed to delete audit:', err);
       alert('Delete failed: ' + err.message);
@@ -476,6 +538,45 @@ export default function VideoAuditDesk({ user, exam }) {
                   )}
                 </div>
               </div>
+
+              {/* Live Processing Indicator Banner */}
+              {(selectedAudit.status === 'PROCESSING' || selectedAudit.status === 'PENDING') && (
+                <div className="bg-[#0071e3]/5 dark:bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-2xl p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-3 mb-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-[#0071e3]/15 text-[#0071e3] flex items-center justify-center shrink-0">
+                        <RefreshCw size={16} className="animate-spin" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-semibold text-[#1d1d1f] dark:text-white">
+                          {selectedAudit.status === 'PENDING' ? 'Initializing AI Forensic Scanner...' : 'AI Forensic Scanner In Progress'}
+                        </h4>
+                        <p className="text-[11px] text-[#86868b]">
+                          Analyzing sampled frames with YOLOv8 & MediaPipe • {selectedAudit.processed_frames || 0} / {selectedAudit.total_frames || '?'} frames analyzed
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-lg font-bold text-[#0071e3]">
+                        {Math.round(selectedAudit.progress_percent || 0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Animated Progress Bar */}
+                  <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-[#0071e3] to-[#47a3ff] h-full rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${Math.max(4, selectedAudit.progress_percent || 0)}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-mono text-[#86868b] mt-2">
+                    <span>Violations flagged so far: <strong className="text-[#ff3b30]">{selectedAudit.total_violations || 0}</strong></span>
+                    <span>Current Risk: <strong className="text-[#ff9500]">{selectedAudit.risk_score || 0.0}</strong></span>
+                  </div>
+                </div>
+              )}
 
               {/* HTML5 Video Player Frame & Tactical Controls */}
               <div className="bg-black rounded-3xl overflow-hidden border border-black/[0.08] dark:border-white/[0.1] shadow-lg relative flex flex-col">
