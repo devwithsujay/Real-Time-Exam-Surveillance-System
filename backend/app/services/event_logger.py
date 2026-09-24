@@ -10,7 +10,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from app.database import get_db_session
-from app.models import Event, EventSeverity, EventType
+from app.models import Event, EventSeverity, EventType, AnomalyStatus
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -39,25 +39,32 @@ class EventData:
     confidence: float
     analysis_data: Optional[Dict[str, Any]] = None
     frame: Optional[np.ndarray] = None
+    status: AnomalyStatus = AnomalyStatus.PRELIMINARY
 
 
 class VideoClipWriter:
-    """Handle video clip extraction for evidence using a rolling frame buffer."""
+    """Handle video clip extraction for evidence using a rolling JPEG-compressed frame buffer."""
 
     def __init__(self, storage_path: str, fps: int = 30):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.fps = fps
-        self.buffer_size = 150  # 5 seconds at 30 FPS
+        duration = getattr(settings, "BUFFER_DURATION_SECONDS", 30)
+        self.buffer_size = int(duration * self.fps)  # e.g., 30s * 30 FPS = 900 frames
+        self.jpeg_quality = getattr(settings, "BUFFER_JPEG_QUALITY", 80)
         self.camera_buffers: Dict[int, deque] = {}
         self._lock = threading.Lock()
 
-    def add_frame(self, camera_id: int, frame: np.ndarray):
-        """Add frame to circular buffer for camera."""
+    def add_frame(self, camera_id: int, frame: np.ndarray, timestamp: Optional[datetime] = None):
+        """Add frame to circular buffer for camera as compressed JPEG byte buffer."""
+        ret, encoded = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality])
+        if not ret:
+            return
+        ts = timestamp or datetime.now()
         with self._lock:
             if camera_id not in self.camera_buffers:
                 self.camera_buffers[camera_id] = deque(maxlen=self.buffer_size)
-            self.camera_buffers[camera_id].append(frame.copy())
+            self.camera_buffers[camera_id].append((ts, encoded))
 
     @staticmethod
     def _remux_to_h264(src: str, dst: str, fps: int) -> bool:
@@ -93,10 +100,11 @@ class VideoClipWriter:
         track_id: int,
         event_type: str,
         timestamp: datetime,
-        duration_seconds: float = 5.0,
+        duration_seconds: Optional[float] = None,
         camera_id: int = 0
     ) -> Optional[str]:
         """Save video clip from rolling buffer as browser-playable H.264 MP4."""
+        eff_duration = duration_seconds if duration_seconds is not None else getattr(settings, "EVENT_CLIP_DURATION_SECONDS", 15.0)
         with self._lock:
             if camera_id not in self.camera_buffers:
                 return None
@@ -106,8 +114,22 @@ class VideoClipWriter:
                 return None
 
             # Calculate frames needed
-            frames_needed = int(duration_seconds * self.fps)
-            frames_to_save = buffer[-frames_needed:] if len(buffer) >= frames_needed else buffer
+            frames_needed = int(eff_duration * self.fps)
+            items_to_save = buffer[-frames_needed:] if len(buffer) >= frames_needed else buffer
+
+            if not items_to_save:
+                return None
+
+            # Decode JPEG buffers to uncompressed frames on demand
+            frames_to_save: List[np.ndarray] = []
+            for item in items_to_save:
+                if isinstance(item, tuple):
+                    _, encoded = item
+                    dec = cv2.imdecode(np.frombuffer(encoded, np.uint8), cv2.IMREAD_COLOR)
+                    if dec is not None:
+                        frames_to_save.append(dec)
+                elif isinstance(item, np.ndarray):
+                    frames_to_save.append(item)
 
             if not frames_to_save:
                 return None
@@ -250,13 +272,13 @@ class EventLogger:
                     overlays
                 )
 
-            # Capture video clip (5 seconds rolling history)
+            # Capture video clip (rolling history based on EVENT_CLIP_DURATION_SECONDS)
             clip_path = self.clip_writer.save_clip(
                 event_data.exam_id,
                 event_data.track_id,
                 event_data.event_type.value,
                 event_data.timestamp,
-                duration_seconds=5.0,
+                duration_seconds=getattr(settings, "EVENT_CLIP_DURATION_SECONDS", 15.0),
                 camera_id=event_data.camera_id
             )
 
@@ -274,7 +296,8 @@ class EventLogger:
                 confidence=event_data.confidence,
                 analysis_data=event_data.analysis_data,
                 evidence_clip_path=clip_path,
-                evidence_screenshot_path=screenshot_path
+                evidence_screenshot_path=screenshot_path,
+                status=event_data.status
             )
 
             logger.info(

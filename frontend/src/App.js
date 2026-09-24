@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Camera, AlertTriangle, Users, Activity, Bell, ChevronLeft,
-  X, Play, Pause, Download, Shield, LogOut, Sun, Moon, Film
+  X, Play, Pause, Download, Shield, LogOut, Sun, Moon, Film,
+  RotateCcw, Loader2
 } from 'lucide-react';
 import ExamMonitor from './components/ExamMonitor';
 import AlertPanel from './components/AlertPanel';
@@ -39,6 +40,8 @@ function SurveillanceDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [selectedIncidentId, setSelectedIncidentId] = useState(null);
+  const [recordFullSession, setRecordFullSession] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
   const frameHandlersRef = useRef(new Set());
 
   // Unified Theme Hook
@@ -200,7 +203,7 @@ function SurveillanceDashboard() {
   const startExam = async () => {
     if (!exam) return;
     try {
-      const data = await api.exams.start(exam.exam_id);
+      const data = await api.exams.start(exam.exam_id, recordFullSession);
       if (data) {
         setExam(prev => ({ ...prev, status: data.status, started_at: data.started_at }));
         setPipelineRunning(true);
@@ -210,12 +213,33 @@ function SurveillanceDashboard() {
     }
   };
 
+  const handleReanalyzeExam = async () => {
+    if (!exam || !exam.exam_id) return;
+    setReanalyzing(true);
+    try {
+      const res = await api.exams.reanalyze(exam.exam_id, { sample_fps: 2, enable_vlm: true });
+      if (res && res.audit_id) {
+        alert(`Forensic re-analysis launched for "${exam.exam_name}"!\nCheck the Video Audits tab to track progress.`);
+        setActiveTab('audit');
+      }
+    } catch (err) {
+      alert(`Failed to launch re-analysis: ${err.message}`);
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
   const endExam = async () => {
     if (!exam) return;
     try {
       const data = await api.exams.end(exam.exam_id);
       if (data) {
-        setExam(prev => ({ ...prev, status: data.status, ended_at: data.ended_at }));
+        setExam(prev => ({
+          ...prev,
+          status: data.status,
+          ended_at: data.ended_at,
+          recording_path: data.recording_path || prev.recording_path
+        }));
         setPipelineRunning(false);
       }
     } catch (err) {
@@ -491,13 +515,24 @@ function SurveillanceDashboard() {
               {isAdmin ? (
                 <>
                   {exam.status === 'CREATED' && (
-                    <button
-                      onClick={startExam}
-                      disabled={loading}
-                      className="w-full ess-btn-success text-xs py-2 rounded-xl font-medium"
-                    >
-                      <Play size={12} className="fill-white" /> Start Session
-                    </button>
+                    <>
+                      <label className="flex items-center gap-2 cursor-pointer text-[11px] text-[#1d1d1f] dark:text-white/90 bg-black/[0.04] dark:bg-white/[0.04] p-2 rounded-xl border border-black/[0.06] dark:border-white/[0.06]">
+                        <input
+                          type="checkbox"
+                          checked={recordFullSession}
+                          onChange={(e) => setRecordFullSession(e.target.checked)}
+                          className="rounded text-[#0071e3] focus:ring-0 cursor-pointer w-3.5 h-3.5"
+                        />
+                        <span className="select-none font-medium">Record Full Session Video</span>
+                      </label>
+                      <button
+                        onClick={startExam}
+                        disabled={loading}
+                        className="w-full ess-btn-success text-xs py-2 rounded-xl font-medium"
+                      >
+                        <Play size={12} className="fill-white" /> Start Session
+                      </button>
+                    </>
                   )}
                   {exam.status === 'IN_PROGRESS' && (
                     <button
@@ -521,6 +556,32 @@ function SurveillanceDashboard() {
               >
                 <Download size={12} className="text-[#86868b]" /> Export Report
               </button>
+
+              {exam.recording_path && (
+                <div className="pt-2 border-t border-black/[0.06] dark:border-white/[0.06] space-y-1.5">
+                  <a
+                    href={`/api/exams/${exam.exam_id}/recording?download=true`}
+                    download
+                    className="w-full ess-btn-secondary text-xs py-2 rounded-xl font-medium flex items-center justify-center gap-1.5 text-[#0071e3]"
+                    title="Download full continuous session video recording (H.264 MP4)"
+                  >
+                    <Download size={12} />
+                    <span>Full Video Recording</span>
+                  </a>
+
+                  {isAdmin && (
+                    <button
+                      onClick={handleReanalyzeExam}
+                      disabled={reanalyzing}
+                      className="w-full ess-btn-primary text-xs py-2 rounded-xl font-medium flex items-center justify-center gap-1.5"
+                      title="Re-analyze the entire recorded video using forensic AI"
+                    >
+                      {reanalyzing ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                      <span>{reanalyzing ? 'Starting Audit...' : 'Re-Analyze Whole Exam'}</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

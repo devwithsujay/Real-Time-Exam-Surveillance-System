@@ -25,12 +25,14 @@ from app.config import get_settings
 from app.database import init_db, get_db, engine
 from app.models import (
     Base, Exam, Participant, Event, ExamStatus, ParticipantStatus, EventType, EventSeverity,
-    User, UserRole, PendingAction, ActionStatus, VideoAudit, VideoAuditIncident, VideoAuditStatus
+    User, UserRole, PendingAction, ActionStatus, VideoAudit, VideoAuditIncident, VideoAuditStatus,
+    AnomalyStatus
 )
 from app.schemas import (
     ExamCreate, ExamUpdate, ExamResponse, ExamStartResponse, ExamEndResponse,
+    ExamReanalyzeRequest, ExamReanalyzeResponse,
     ParticipantCreate, ParticipantResponse, ParticipantCheckIn, ParticipantCheckInResponse, ParticipantCheckOutResponse,
-    EventResponse, EventReviewRequest, EventReviewResponse,
+    EventResponse, EventReviewRequest, EventReviewResponse, EventStatusUpdateRequest, EventStatusUpdateResponse,
     ExamAnalyticsResponse, ParticipantAnalyticsResponse,
     WSMessageType, WSAlertPayload, WSAnalyticsPayload,
     ConfigResponse, ConfigUpdateRequest,
@@ -41,12 +43,13 @@ from app.schemas import (
 )
 from app.services.video_audit_service import VideoAuditService
 from app.services.video_audit_report import generate_video_audit_pdf
+from app.services.session_recorder import SessionVideoRecorder
 from app.crud import (
     utcnow,
     create_exam, get_exam, get_exams, update_exam, start_exam, end_exam, delete_exam,
     create_participant, get_participant, get_participants_by_exam, get_participants_count,
     checkin_participant, checkout_participant, batch_checkin_participants, seed_exam_participants,
-    create_event, get_events, get_events_count, get_event, review_event,
+    create_event, get_events, get_events_count, get_event, review_event, update_event_status,
     get_exam_analytics, get_participant_analytics,
     create_user, get_user_by_username, get_user_by_email, get_user_by_id, list_users, update_user,
     create_pending_action, get_pending_action, list_pending_actions, resolve_pending_action
@@ -85,6 +88,8 @@ mediapipe_analyzer: Optional[MediaPipeAnalyzer] = None
 anomaly_detector: Optional[AnomalyDetector] = None
 event_logger: Optional[EventLogger] = None
 vlm: Optional[LMStudioVLM] = None
+session_recorder: Optional[SessionVideoRecorder] = None
+record_session_active: bool = False
 
 pipeline_running = False
 pipeline_task: Optional[asyncio.Task] = None
@@ -188,6 +193,7 @@ def _exam_to_response(db_exam: Exam, **kwargs) -> ExamResponse:
         num_students=db_exam.num_students,
         num_cameras=db_exam.num_cameras,
         settings=json.loads(db_exam.settings) if db_exam.settings else None,
+        recording_path=getattr(db_exam, 'recording_path', None),
         created_at=db_exam.created_at,
         started_at=db_exam.started_at,
         ended_at=db_exam.ended_at,
@@ -204,6 +210,7 @@ def _event_to_response(e: Event) -> EventResponse:
         camera_id=e.camera_id,
         event_type=e.event_type,
         severity=e.severity,
+        status=e.status or AnomalyStatus.PRELIMINARY,
         timestamp=e.timestamp,
         description=e.description,
         confidence=e.confidence,
@@ -384,8 +391,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-    allow_methods=settings.CORS_ALLOW_METHODS,
-    allow_headers=settings.CORS_ALLOW_HEADERS,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 try:
@@ -761,6 +768,7 @@ async def delete_exam_endpoint(
 @app.post("/api/exams/{exam_id}/start", response_model=ExamStartResponse)
 async def start_exam_endpoint(
     exam_id: UUID,
+    record_full_session: Optional[bool] = Query(None, description="Toggle whether to record full-length exam video to disk"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -768,19 +776,24 @@ async def start_exam_endpoint(
     if not db_exam:
         raise HTTPException(status_code=400, detail="Cannot start exam (not in CREATED state or not found)")
 
-    global pipeline_running, pipeline_task, current_exam_id, _latest_vlm_result, _track_face_counters, _track_to_participant
+    # Flexible toggle: query param takes precedence; otherwise fallback to settings.RECORD_FULL_SESSION
+    should_record = settings.RECORD_FULL_SESSION if record_full_session is None else record_full_session
+
+    global pipeline_running, pipeline_task, current_exam_id, _latest_vlm_result, _track_face_counters, _track_to_participant, record_session_active
+    record_session_active = should_record
     if not pipeline_running:
         _latest_vlm_result = None
         _track_face_counters.clear()
         _track_to_participant.clear()
         current_exam_id = exam_id
         pipeline_running = True
-        pipeline_task = asyncio.create_task(run_pipeline(exam_id))
+        pipeline_task = asyncio.create_task(run_pipeline(exam_id, record_full_session=should_record))
 
     return ExamStartResponse(
         exam_id=str(db_exam.exam_id),
         status=db_exam.status,
         started_at=db_exam.started_at,
+        recording_active=should_record,
         camera_status=[{"camera_id": 0, "status": "ACTIVE", "fps": settings.CAMERA_FPS}]
     )
 
@@ -791,11 +804,15 @@ async def end_exam_endpoint(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    await stop_pipeline()
+    final_recording_path = await stop_pipeline()
 
     db_exam = end_exam(db, exam_id)
     if not db_exam:
         raise HTTPException(status_code=400, detail="Cannot end exam (not in progress or not found)")
+
+    if final_recording_path:
+        db_exam.recording_path = final_recording_path
+        db.commit()
 
     total_students = get_participants_count(db, exam_id)
     completed = db.query(func.count(Participant.participant_id)).filter(
@@ -818,6 +835,7 @@ async def end_exam_endpoint(
         status=db_exam.status,
         ended_at=db_exam.ended_at,
         total_duration_minutes=db_exam.duration_minutes,
+        recording_path=db_exam.recording_path,
         summary={
             "total_students": total_students,
             "completed": completed,
@@ -825,6 +843,84 @@ async def end_exam_endpoint(
             "high_severity_events": high_events,
             "flagged_students": flagged
         }
+    )
+
+
+@app.get("/api/exams/{exam_id}/recording")
+async def get_exam_recording_endpoint(
+    exam_id: UUID,
+    request: Request,
+    download: bool = Query(False, description="True to force download; False to stream in HTML5 player"),
+    db: Session = Depends(get_db)
+):
+    """Download or stream the archived full session recording for an examination."""
+    exam = get_exam(db, exam_id)
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    if not exam.recording_path or not os.path.exists(exam.recording_path):
+        raise HTTPException(
+            status_code=404,
+            detail="No continuous session recording found for this exam (recording may have been disabled at start)."
+        )
+
+    if download:
+        safe_name = (exam.exam_name or "exam").replace(" ", "_")
+        return FileResponse(
+            exam.recording_path,
+            filename=f"exam_{safe_name}_{exam_id}_session.mp4",
+            media_type="video/mp4"
+        )
+    return _stream_video_range(request, exam.recording_path)
+
+
+@app.post("/api/exams/{exam_id}/reanalyze", response_model=ExamReanalyzeResponse)
+async def reanalyze_exam_endpoint(
+    exam_id: UUID,
+    body: ExamReanalyzeRequest = Body(default=ExamReanalyzeRequest()),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Trigger a full forensic audit scan on the archived continuous exam recording."""
+    exam = get_exam(db, exam_id)
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    if not exam.recording_path or not os.path.exists(exam.recording_path):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot re-analyze: No full session video recording exists for this exam."
+        )
+
+    audit_id = str(uuid.uuid4())
+    file_size = os.path.getsize(exam.recording_path)
+    title = f"Post-Hoc Re-Analysis: {exam.exam_name}"
+    filename = os.path.basename(exam.recording_path)
+
+    audit = VideoAudit(
+        audit_id=audit_id,
+        title=title,
+        filename=filename,
+        video_path=exam.recording_path,
+        file_size_bytes=file_size,
+        sample_fps=body.sample_fps,
+        status=VideoAuditStatus.PENDING,
+        uploaded_by=current_user.user_id,
+        exam_id=str(exam_id)
+    )
+    db.add(audit)
+    db.commit()
+
+    # Launch background audit worker
+    VideoAuditService.launch_audit(
+        audit_id=audit_id,
+        video_path=exam.recording_path,
+        sample_fps=body.sample_fps
+    )
+
+    return ExamReanalyzeResponse(
+        status="AUDIT_STARTED",
+        audit_id=audit_id,
+        exam_id=str(exam_id),
+        message=f"Full exam video forensic re-analysis started with audit ID {audit_id}."
     )
 
 
@@ -969,6 +1065,7 @@ async def get_exam_events(
     exam_id: UUID,
     severity: Optional[str] = None,
     event_type: Optional[str] = None,
+    status: Optional[str] = None,
     participant_id: Optional[UUID] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
@@ -982,6 +1079,7 @@ async def get_exam_events(
 
     severity_list = [EventSeverity(s) for s in severity.split(",")] if severity else None
     type_list = [EventType(t) for t in event_type.split(",")] if event_type else None
+    status_list = [AnomalyStatus(s) for s in status.split(",")] if status else None
 
     events = get_events(
         db,
@@ -989,6 +1087,7 @@ async def get_exam_events(
         participant_id=participant_id,
         severity=severity_list,
         event_type=type_list,
+        status=status_list,
         start_time=start_time,
         end_time=end_time,
         skip=(page - 1) * limit,
@@ -999,7 +1098,8 @@ async def get_exam_events(
         exam_id=exam_id,
         participant_id=participant_id,
         severity=severity_list,
-        event_type=type_list
+        event_type=type_list,
+        status=status_list
     )
 
     return {
@@ -1033,17 +1133,57 @@ async def get_event_endpoint(event_id: str, db: Session = Depends(get_db)):
 async def review_event_endpoint(
     event_id: UUID,
     review: EventReviewRequest,
-    current_user: User = Depends(require_any_authenticated),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    reviewer_title = f"{current_user.username} ({current_user.role.value})"
+    reviewer_title = f"{current_user.username} ({current_user.role.value})" if current_user else "proctor (invigilator)"
     event = review_event(db, event_id, review, reviewer_title)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    try:
+        await broadcast_event(str(event.exam_id), event)
+    except Exception as e:
+        logger.warning(f"Failed to broadcast review update for event {event_id}: {e}")
+
     return EventReviewResponse(
         event_id=str(event.event_id),
         human_reviewed=event.human_reviewed,
+        review_notes=event.review_notes,
+        reviewed_by=event.reviewed_by,
+        reviewed_at=event.reviewed_at
+    )
+
+
+@app.patch("/api/events/{event_id}/status", response_model=EventStatusUpdateResponse)
+async def update_event_status_endpoint(
+    event_id: str,
+    body: EventStatusUpdateRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """Update lifecycle status of an anomaly event (Phase 1 State Machine)."""
+    reviewer_title = f"{current_user.username} ({current_user.role.value})" if current_user else "proctor (invigilator)"
+    event = update_event_status(
+        db=db,
+        event_id=event_id,
+        status=body.status,
+        reviewer=reviewer_title,
+        review_notes=body.review_notes,
+        severity_override=body.severity_override
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Broadcast updated event state over WebSocket to all connected proctors
+    try:
+        await broadcast_event(str(event.exam_id), event)
+    except Exception as e:
+        logger.warning(f"Failed to broadcast status update for event {event_id}: {e}")
+
+    return EventStatusUpdateResponse(
+        event_id=str(event.event_id),
+        status=event.status,
         review_notes=event.review_notes,
         reviewed_by=event.reviewed_by,
         reviewed_at=event.reviewed_at
@@ -1557,6 +1697,8 @@ async def broadcast_event(exam_id: str, event):
     if not event or not event.event_id:
         logger.warning("Skipping broadcast for event with missing event_id")
         return
+    ev_status = getattr(event, 'status', AnomalyStatus.PRELIMINARY)
+    status_val = ev_status.value if hasattr(ev_status, 'value') else (ev_status or "PRELIMINARY")
     message = {
         "type": "event",
         "payload": {
@@ -1565,6 +1707,7 @@ async def broadcast_event(exam_id: str, event):
             "camera_id": event.camera_id or 0,
             "event_type": event.event_type.value if hasattr(event.event_type, 'value') else event.event_type,
             "severity": event.severity.value if hasattr(event.severity, 'value') else event.severity,
+            "status": status_val,
             "timestamp": event.timestamp.isoformat() if hasattr(event.timestamp, 'isoformat') else str(event.timestamp),
             "description": event.description,
             "confidence": event.confidence or 0,
@@ -1572,6 +1715,10 @@ async def broadcast_event(exam_id: str, event):
             "evidence_clip_path": event.evidence_clip_path or None,
             "evidence_screenshot_path": event.evidence_screenshot_path or None,
             "participant_id": event.participant_id or "",
+            "human_reviewed": bool(getattr(event, 'human_reviewed', False)),
+            "review_notes": getattr(event, 'review_notes', None),
+            "reviewed_by": getattr(event, 'reviewed_by', None),
+            "reviewed_at": event.reviewed_at.isoformat() if getattr(event, 'reviewed_at', None) else None,
         },
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
@@ -1660,6 +1807,8 @@ async def run_display_loop(exam_id: UUID):
             raw_frame = frame_data.frame
             if event_logger:
                 event_logger.add_frame(0, raw_frame)
+            if session_recorder:
+                session_recorder.add_frame(raw_frame)
 
             jpeg_bytes = await loop.run_in_executor(None, lambda: cv2.imencode(
                 '.jpg', raw_frame, [cv2.IMWRITE_JPEG_QUALITY, 50]
@@ -1915,11 +2064,11 @@ async def run_analysis_loop(exam_id: UUID):
         logger.info("Analysis loop stopped")
 
 
-async def run_pipeline(exam_id: UUID):
+async def run_pipeline(exam_id: UUID, record_full_session: bool = False):
     """Run display + analysis loops concurrently. Auto-restarts analysis on crash."""
-    global pipeline_running
+    global pipeline_running, session_recorder
 
-    logger.info(f"Starting dual pipeline for exam {exam_id}")
+    logger.info(f"Starting dual pipeline for exam {exam_id} (record_full_session={record_full_session})")
 
     if not camera_manager:
         logger.error("Failed to start camera: camera_manager not initialized")
@@ -1931,6 +2080,22 @@ async def run_pipeline(exam_id: UUID):
         logger.error("Failed to start camera")
         pipeline_running = False
         return
+
+    # Initialize continuous session video recorder if toggled ON
+    if record_full_session:
+        recorder = SessionVideoRecorder(
+            output_dir=settings.VIDEO_STORAGE_PATH,
+            exam_id=str(exam_id),
+            fps=settings.CAMERA_FPS,
+            resolution=(settings.CAMERA_RESOLUTION_WIDTH, settings.CAMERA_RESOLUTION_HEIGHT)
+        )
+        if recorder.start():
+            session_recorder = recorder
+            logger.info(f"Full session recording active for exam {exam_id}")
+        else:
+            session_recorder = None
+    else:
+        session_recorder = None
 
     display_task = asyncio.create_task(run_display_loop(exam_id))
     analysis_task = asyncio.create_task(run_analysis_loop(exam_id))
@@ -1961,10 +2126,20 @@ async def run_pipeline(exam_id: UUID):
         logger.info(f"Pipeline stopped for exam {exam_id}")
 
 
-async def stop_pipeline():
-    global pipeline_running, pipeline_task, current_exam_id
+async def stop_pipeline() -> Optional[str]:
+    global pipeline_running, pipeline_task, current_exam_id, session_recorder
 
     pipeline_running = False
+    finalized_video_path = None
+
+    if session_recorder:
+        try:
+            finalized_video_path = session_recorder.stop()
+            logger.info(f"Session recording finalized at: {finalized_video_path}")
+        except Exception as e:
+            logger.error(f"Error stopping session recorder: {e}")
+        session_recorder = None
+
     if pipeline_task:
         pipeline_task.cancel()
         try:
@@ -1972,7 +2147,9 @@ async def stop_pipeline():
         except asyncio.CancelledError:
             pass
         pipeline_task = None
-        current_exam_id = None
+
+    current_exam_id = None
+    return finalized_video_path
 
 
 if __name__ == "__main__":

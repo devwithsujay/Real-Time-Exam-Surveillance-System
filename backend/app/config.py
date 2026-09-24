@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./data/exam_surveillance.db"
     SQLALCHEMY_ECHO: bool = False
 
-    # Camera
+    # Camera & Ring Buffer
     NUM_CAMERAS: int = 1
     CAMERA_FPS: int = 30
     CAMERA_RESOLUTION_WIDTH: int = 1280
@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     CAMERA_BUFFER_SIZE: int = 15
     CAMERA_TIMEOUT_SECONDS: int = 5
     CAMERA_0_SOURCE: str = "0"
+    BUFFER_DURATION_SECONDS: int = 45  # 45s rolling circular buffer in RAM (~19 MB)
+    BUFFER_JPEG_QUALITY: int = 80
+    EVENT_CLIP_DURATION_SECONDS: float = 15.0  # 15s forensic incident clips (can be set to 20.0 via .env)
+    RECORD_FULL_SESSION: bool = False  # Toggle for archiving full-length exam video
 
     # Model Paths
     YOLOV8_MODEL_PATH: str = os.path.join(_project_root, "models", "yolov8n.pt")
@@ -69,6 +73,10 @@ class Settings(BaseSettings):
     ENABLE_AUDIO_ANALYSIS: bool = True
     ENABLE_MULTIMODAL_ANALYSIS: bool = True
 
+    # Audio Analysis
+    AUDIO_BLOCK_SECONDS: float = 0.1
+    AUDIO_SAMPLE_RATE: int = 16000
+
     # Anomaly Detection Thresholds
     GAZE_DEVIATION_THRESHOLD_FRAMES: int = 30
     GAZE_DEVIATION_ANGLE: int = 30
@@ -88,17 +96,20 @@ class Settings(BaseSettings):
     WEBSOCKET_FRAME_RATE: int = 2
     WEBSOCKET_BATCH_SIZE: int = 5
 
-    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000", "http://localhost:8080"])
+    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8080", "http://127.0.0.1:8080"])
     CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: List[str] = Field(default=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-    CORS_ALLOW_HEADERS: List[str] = Field(default=["Content-Type", "Authorization"])
+    CORS_ALLOW_METHODS: List[str] = Field(default=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "*"])
+    CORS_ALLOW_HEADERS: List[str] = Field(default=["*"])
 
-    # LM Studio VLM
+    # VLM Configuration (Multi-Provider: LM Studio + Ollama)
     VLM_ENABLED: bool = True
+    VLM_PROVIDER: str = "lmstudio"  # "lmstudio" | "ollama"
     VLM_BASE_URL: str = "http://127.0.0.1:1234/v1"
     VLM_MODEL: str = "qwen/qwen3-vl-4b"
     VLM_MAX_TOKENS: int = 512
     VLM_TIMEOUT: int = 60
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llava:latest"
 
     # Redis
     REDIS_URL: str = "redis://127.0.0.1:6379/0"

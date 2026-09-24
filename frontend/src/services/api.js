@@ -89,10 +89,14 @@ export const api = {
     create: (data) => request('/api/exams', { method: 'POST', body: JSON.stringify(data) }),
     update: (examId, data) => request(`/api/exams/${examId}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (examId) => request(`/api/exams/${examId}`, { method: 'DELETE' }),
-    start: (examId) => request(`/api/exams/${examId}/start`, { method: 'POST' }),
+    start: (examId, recordFullSession = null) => {
+      const qs = recordFullSession !== null ? `?record_full_session=${recordFullSession}` : '';
+      return request(`/api/exams/${examId}/start${qs}`, { method: 'POST' });
+    },
     end: (examId) => request(`/api/exams/${examId}/end`, { method: 'POST' }),
     downloadReport: (examId, format = 'pdf') => request(`/api/exams/${examId}/report?format=${format}`, { asBlob: true }),
     getAnalytics: (examId) => request(`/api/exams/${examId}/analytics`),
+    reanalyze: (examId, options = {}) => request(`/api/exams/${examId}/reanalyze`, { method: 'POST', body: JSON.stringify(options) }),
   },
 
   // Participants
@@ -133,6 +137,11 @@ export const api = {
       request(`/api/events/${eventId}/review`, {
         method: 'PUT',
         body: JSON.stringify(data)
+      }),
+    updateStatus: (eventId, status, reviewNotes = '') =>
+      request(`/api/events/${eventId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, review_notes: reviewNotes })
       }),
     clipUrl: (eventId) => `${API_BASE}/api/events/${eventId}/clip`,
     screenshotUrl: (eventId) => `${API_BASE}/api/events/${eventId}/screenshot`,

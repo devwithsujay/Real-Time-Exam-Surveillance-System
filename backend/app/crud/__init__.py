@@ -8,7 +8,7 @@ from sqlalchemy import func, desc
 
 from app.models import (
     Exam, Participant, Event, ExamStatus, ParticipantStatus, EventType, EventSeverity,
-    User, UserRole, PendingAction, ActionStatus
+    User, UserRole, PendingAction, ActionStatus, AnomalyStatus
 )
 from app.schemas import (
     ExamCreate, ExamUpdate, ParticipantCreate, ParticipantCheckIn, EventReviewRequest,
@@ -262,7 +262,8 @@ def create_event(
     confidence: float,
     analysis_data: Optional[Dict[str, Any]] = None,
     evidence_clip_path: Optional[str] = None,
-    evidence_screenshot_path: Optional[str] = None
+    evidence_screenshot_path: Optional[str] = None,
+    status: AnomalyStatus = AnomalyStatus.PRELIMINARY
 ) -> Event:
     p_id_str = str(participant_id) if participant_id else None
     event = Event(
@@ -272,6 +273,7 @@ def create_event(
         camera_id=camera_id,
         event_type=event_type,
         severity=severity,
+        status=status,
         timestamp=timestamp,
         description=description,
         confidence=confidence,
@@ -300,6 +302,7 @@ def get_events(
     participant_id=None,
     severity: Optional[List[EventSeverity]] = None,
     event_type: Optional[List[EventType]] = None,
+    status: Optional[List[AnomalyStatus]] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     skip: int = 0,
@@ -316,6 +319,8 @@ def get_events(
         query = query.filter(Event.severity.in_(severity))
     if event_type:
         query = query.filter(Event.event_type.in_(event_type))
+    if status:
+        query = query.filter(Event.status.in_(status))
     if start_time:
         query = query.filter(Event.timestamp >= start_time)
     if end_time:
@@ -334,7 +339,8 @@ def get_events_count(
     exam_id=None,
     participant_id=None,
     severity: Optional[List[EventSeverity]] = None,
-    event_type: Optional[List[EventType]] = None
+    event_type: Optional[List[EventType]] = None,
+    status: Optional[List[AnomalyStatus]] = None
 ) -> int:
     query = db.query(func.count(Event.event_id))
 
@@ -346,6 +352,8 @@ def get_events_count(
         query = query.filter(Event.severity.in_(severity))
     if event_type:
         query = query.filter(Event.event_type.in_(event_type))
+    if status:
+        query = query.filter(Event.status.in_(status))
 
     return query.scalar()
 
@@ -360,12 +368,40 @@ def review_event(db: Session, event_id, review: EventReviewRequest, reviewer: st
         return None
 
     event.human_reviewed = review.reviewed
+    event.status = AnomalyStatus.HUMAN_RESOLVED if review.reviewed else AnomalyStatus.NEEDS_REVIEW
     event.review_notes = review.review_notes
     event.reviewed_by = reviewer
     event.reviewed_at = utcnow()
 
     if review.severity_override:
         event.severity = review.severity_override
+
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def update_event_status(
+    db: Session,
+    event_id,
+    status: AnomalyStatus,
+    reviewer: str,
+    review_notes: Optional[str] = None,
+    severity_override: Optional[EventSeverity] = None
+) -> Optional[Event]:
+    event = get_event(db, event_id)
+    if not event:
+        return None
+
+    event.status = status
+    if review_notes is not None:
+        event.review_notes = review_notes
+    if severity_override is not None:
+        event.severity = severity_override
+    event.reviewed_by = reviewer
+    event.reviewed_at = utcnow()
+    if status == AnomalyStatus.HUMAN_RESOLVED:
+        event.human_reviewed = True
 
     db.commit()
     db.refresh(event)

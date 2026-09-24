@@ -8,6 +8,8 @@ import time
 
 import numpy as np
 
+from app.config import get_settings
+
 try:
     import sounddevice as sd
     _AVAILABLE = True
@@ -15,8 +17,7 @@ except ImportError:
     sd = None
     _AVAILABLE = False
 
-BLOCK_SECONDS = 0.2
-SAMPLE_RATE = 16000
+settings = get_settings()
 
 
 class AudioLevelService:
@@ -26,6 +27,18 @@ class AudioLevelService:
         self._running = False
         self._thread: threading.Thread | None = None
         self._error = None
+
+    @property
+    def sample_rate(self) -> int:
+        return getattr(settings, "AUDIO_SAMPLE_RATE", 16000)
+
+    @property
+    def block_seconds(self) -> float:
+        return getattr(settings, "AUDIO_BLOCK_SECONDS", 0.1)
+
+    @property
+    def block_size(self) -> int:
+        return int(self.sample_rate * self.block_seconds)
 
     def start(self) -> bool:
         if not _AVAILABLE or sd is None:
@@ -45,15 +58,17 @@ class AudioLevelService:
     def _loop(self):
         if sd is None:
             return
+        sample_rate = self.sample_rate
+        blocksize = self.block_size
         try:
             with sd.InputStream(
-                samplerate=SAMPLE_RATE,
+                samplerate=sample_rate,
                 channels=1,
-                blocksize=int(SAMPLE_RATE * BLOCK_SECONDS),
+                blocksize=blocksize,
                 dtype="float32",
             ) as stream:
                 while self._running:
-                    data, _ = stream.read(int(SAMPLE_RATE * BLOCK_SECONDS))
+                    data, _ = stream.read(blocksize)
                     rms = float(np.sqrt(np.mean(data ** 2)))
                     dbfs = 20.0 * np.log10(rms + 1e-10) if rms > 0 else -100.0
                     # Map digital dBFS (-100 dBFS to 0 dBFS) to positive 0-100 sound level

@@ -48,6 +48,16 @@ def init_db():
                     conn.execute(text("ALTER TABLE video_audit_incidents ADD COLUMN vlm_verified BOOLEAN DEFAULT 0"))
                 if "vlm_analysis" not in existing_cols:
                     conn.execute(text("ALTER TABLE video_audit_incidents ADD COLUMN vlm_analysis TEXT"))
+            # Check events table for status column
+            events_info = conn.execute(text("PRAGMA table_info(events)")).fetchall()
+            existing_event_cols = {row[1] for row in events_info}
+            if existing_event_cols and "status" not in existing_event_cols:
+                conn.execute(text("ALTER TABLE events ADD COLUMN status VARCHAR(20) DEFAULT 'PRELIMINARY'"))
+            # Check exams table for recording_path column
+            exams_info = conn.execute(text("PRAGMA table_info(exams)")).fetchall()
+            existing_exam_cols = {row[1] for row in exams_info}
+            if existing_exam_cols and "recording_path" not in existing_exam_cols:
+                conn.execute(text("ALTER TABLE exams ADD COLUMN recording_path VARCHAR(500)"))
     except Exception as e:
         # Ignore if table doesn't exist yet or columns already exist
         pass

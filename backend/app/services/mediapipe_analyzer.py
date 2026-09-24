@@ -24,10 +24,14 @@ class FaceAnalysis:
     face_detected: bool = False
     bbox: Optional[List[int]] = None
     landmarks: Optional[List[List[float]]] = None
+    landmarks_3d: Optional[List[List[float]]] = None
     gaze_direction: str = "CENTER"
     gaze_screen_x: float = 50.0
     gaze_screen_y: float = 50.0
     gaze_confidence: float = 0.0
+    gaze_yaw: float = 0.0
+    gaze_pitch: float = 0.0
+    gaze_vector_3d: Optional[Tuple[float, float, float]] = None
     head_pose: Dict[str, Any] = field(default_factory=dict)
     left_eye_landmarks: Optional[List[List[float]]] = None
     right_eye_landmarks: Optional[List[List[float]]] = None
@@ -146,22 +150,29 @@ class MediaPipeAnalyzer:
 
         face_landmarks = results.face_landmarks[0]
         landmarks = []
+        landmarks_3d = []
         for lm in face_landmarks:
             landmarks.append([lm.x * crop_w + offset_x, lm.y * crop_h + offset_y])
+            landmarks_3d.append([lm.x * crop_w + offset_x, lm.y * crop_h + offset_y, lm.z * crop_w])
         landmarks = np.array(landmarks)
+        landmarks_3d = np.array(landmarks_3d)
         x_min, y_min = landmarks[:, 0].min(), landmarks[:, 1].min()
         x_max, y_max = landmarks[:, 0].max(), landmarks[:, 1].max()
         face_bbox = [int(x_min), int(y_min), int(x_max), int(y_max)]
-        gaze = self._estimate_gaze(landmarks, w, h)
+        gaze = self._estimate_gaze(landmarks, landmarks_3d, w, h)
         head_pose = self._estimate_head_pose(landmarks, w, h)
         return FaceAnalysis(
             face_detected=True,
             bbox=face_bbox,
             landmarks=landmarks.tolist(),
+            landmarks_3d=landmarks_3d.tolist(),
             gaze_direction=gaze["direction"],
             gaze_screen_x=gaze["screen_x"],
             gaze_screen_y=gaze["screen_y"],
             gaze_confidence=gaze["confidence"],
+            gaze_yaw=gaze.get("yaw", 0.0),
+            gaze_pitch=gaze.get("pitch", 0.0),
+            gaze_vector_3d=gaze.get("gaze_vector_3d"),
             head_pose=head_pose,
             left_eye_landmarks=[landmarks[i].tolist() for i in self.LEFT_EYE_INDICES],
             right_eye_landmarks=[landmarks[i].tolist() for i in self.RIGHT_EYE_INDICES],
@@ -235,8 +246,9 @@ class MediaPipeAnalyzer:
     def _estimate_gaze(
         self,
         landmarks: np.ndarray,
-        frame_w: int,
-        frame_h: int
+        landmarks_3d: Optional[np.ndarray] = None,
+        frame_w: int = 1280,
+        frame_h: int = 720
     ) -> Dict[str, Any]:
         left_iris = landmarks[self.LEFT_IRIS_INDICES]
         right_iris = landmarks[self.RIGHT_IRIS_INDICES]
@@ -273,6 +285,51 @@ class MediaPipeAnalyzer:
         else:
             direction = "CENTER"
         confidence = min(1.0, (left_x > 0) + (right_x > 0)) / 2
+
+        # 3D Calibrated Eye Gaze Vector Computation
+        yaw_deg = 0.0
+        pitch_deg = 0.0
+        gaze_vector_3d = (0.0, 0.0, -1.0)
+        if landmarks_3d is not None and len(landmarks_3d) > max(self.RIGHT_IRIS_INDICES):
+            try:
+                # 1. Approximate 3D eyeball centers from inner/outer canthi + anatomical depth offset
+                left_3d_corner_l = landmarks_3d[self.LEFT_EYE_LEFT]
+                left_3d_corner_r = landmarks_3d[self.LEFT_EYE_RIGHT]
+                left_eye_width_3d = np.linalg.norm(left_3d_corner_r - left_3d_corner_l)
+                left_eyeball_center = (left_3d_corner_l + left_3d_corner_r) / 2.0
+                # MediaPipe z is normalized; offset center slightly inward (+z in camera relative frame)
+                left_eyeball_center = left_eyeball_center.copy()
+                left_eyeball_center[2] += 0.35 * max(left_eye_width_3d, 1.0)
+
+                right_3d_corner_l = landmarks_3d[self.RIGHT_EYE_LEFT]
+                right_3d_corner_r = landmarks_3d[self.RIGHT_EYE_RIGHT]
+                right_eye_width_3d = np.linalg.norm(right_3d_corner_r - right_3d_corner_l)
+                right_eyeball_center = (right_3d_corner_l + right_3d_corner_r) / 2.0
+                right_eyeball_center = right_eyeball_center.copy()
+                right_eyeball_center[2] += 0.35 * max(right_eye_width_3d, 1.0)
+
+                # 2. 3D Iris centers
+                left_iris_3d = landmarks_3d[self.LEFT_IRIS_INDICES].mean(axis=0)
+                right_iris_3d = landmarks_3d[self.RIGHT_IRIS_INDICES].mean(axis=0)
+
+                # 3. Gaze optical vectors: g = p_iris - p_eye_center
+                g_left = left_iris_3d - left_eyeball_center
+                g_right = right_iris_3d - right_eyeball_center
+                g_combined = (g_left + g_right) / 2.0
+                norm = np.linalg.norm(g_combined)
+                if norm > 1e-6:
+                    g_unit = g_combined / norm
+                else:
+                    g_unit = np.array([0.0, 0.0, -1.0])
+
+                # 4. Gaze pitch and yaw in degrees
+                gx, gy, gz = float(g_unit[0]), float(g_unit[1]), float(g_unit[2])
+                pitch_deg = float(np.degrees(np.arctan2(-gy, np.sqrt(gx**2 + gz**2))))
+                yaw_deg = float(np.degrees(np.arctan2(gx, -gz)))
+                gaze_vector_3d = (round(gx, 4), round(gy, 4), round(gz, 4))
+            except Exception as e:
+                logger.debug(f"3D gaze calculation error: {e}")
+
         return {
             "direction": direction,
             "screen_x": screen_x,
@@ -280,6 +337,9 @@ class MediaPipeAnalyzer:
             "confidence": confidence,
             "left_iris": tuple(left_iris_center.tolist()),
             "right_iris": tuple(right_iris_center.tolist()),
+            "yaw": round(yaw_deg, 2),
+            "pitch": round(pitch_deg, 2),
+            "gaze_vector_3d": gaze_vector_3d,
         }
 
     def draw_visualization(
@@ -319,12 +379,12 @@ class MediaPipeAnalyzer:
                 end = (center_x, center_y)
             if end != (center_x, center_y):
                 cv2.arrowedLine(vis, (center_x, center_y), end, (0, 255, 255), 3)
-            cv2.putText(vis, f"Gaze: {analysis.gaze_direction} ({analysis.gaze_confidence:.2f})",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(vis, f"Gaze: {analysis.gaze_direction} ({analysis.gaze_confidence:.2f}) [Y:{analysis.gaze_yaw:+.1f} P:{analysis.gaze_pitch:+.1f}]",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         if show_head_pose and analysis.head_pose:
             hp = analysis.head_pose
             cv2.putText(vis, f"Head: {hp.get('direction', 'FORWARD')}",
-                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
         return vis
 
     def close(self):

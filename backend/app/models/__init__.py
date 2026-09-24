@@ -49,6 +49,15 @@ class ParticipantStatus(str, enum.Enum):
     ABSENT = "ABSENT"
 
 
+class AnomalyStatus(str, enum.Enum):
+    PRELIMINARY = "PRELIMINARY"
+    AI_CONFIRMED = "AI_CONFIRMED"
+    AI_CLEARED = "AI_CLEARED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    HUMAN_RESOLVED = "HUMAN_RESOLVED"
+    ERROR = "ERROR"
+
+
 class Exam(Base):
     __tablename__ = "exams"
 
@@ -62,6 +71,7 @@ class Exam(Base):
     num_cameras = Column(Integer, default=1)
     status = Column(SQLEnum(ExamStatus), default=ExamStatus.CREATED, nullable=False)
     settings = Column(Text)  # JSON string for flexible settings
+    recording_path = Column(String(500), nullable=True)  # Path to full-length MP4 video if recorded
     created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
@@ -118,6 +128,7 @@ class Event(Base):
     analysis_data = Column(Text)  # JSON string
     evidence_clip_path = Column(String(500), nullable=True)
     evidence_screenshot_path = Column(String(500), nullable=True)
+    status = Column(SQLEnum(AnomalyStatus), default=AnomalyStatus.PRELIMINARY, nullable=False)
     human_reviewed = Column(Boolean, default=False)
     review_notes = Column(Text, nullable=True)
     reviewed_by = Column(String(100), nullable=True)
@@ -132,6 +143,7 @@ class Event(Base):
         Index("idx_event_participant", "participant_id"),
         Index("idx_event_type_severity", "event_type", "severity"),
         Index("idx_event_track", "exam_id", "track_id"),
+        Index("idx_event_status", "status"),
     )
 
 

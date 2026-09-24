@@ -30,15 +30,17 @@ if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scr
     set "PY_CMD=python"
 )
 
-echo [*] Python Interpreter: "%PY_CMD%"
+:: Convert to 8.3 short path to prevent issues with spaces in cmd /k
+for %%I in ("%PY_CMD%") do set "PY_CMD=%%~sI"
+
 echo [*] Launching FastAPI Backend (Port 8000)...
-start "ARGUS Backend (FastAPI :8000)" /D "%~dp0backend" cmd /k "set PYTHONPATH=.;..& call "%PY_CMD%" -u -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info"
+start "ARGUS Backend (FastAPI :8000)" "%~dp0run_backend.bat"
 
 echo [*] Waiting for Backend to initialize...
-ping 127.0.0.1 -n 5 >nul
+ping 127.0.0.1 -n 4 >nul
 
 echo [*] Launching React Frontend Dashboard (Port 3000)...
-start "ARGUS Frontend (React :3000)" /D "%~dp0frontend" cmd /k "npm start"
+start "ARGUS Frontend (React :3000)" "%~dp0run_frontend.bat"
 
 echo.
 echo ======================================================================

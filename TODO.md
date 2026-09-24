@@ -282,6 +282,7 @@ Universities, certification bodies, and remote testing platforms frequently reco
 - [x] Expose HTTP byte-range video streaming endpoint for seamless HTML5 player timecode seeking.
 - [x] Build frontend `VideoAuditDesk` featuring drag-and-drop video upload, active processing progress bar, and an interactive video player with a clickable incident scrub bar (jumping immediately to the violation timecode).
 - [x] Integrate 1-click ReportLab PDF compliance dossier export for audited sessions.
+- [x] Integrate 1-click live session re-analysis (`POST /api/exams/{id}/reanalyze`) linking recorded session MP4s directly to `VideoAuditService`.
 
 ### Step-by-Step Implementation Guide
 

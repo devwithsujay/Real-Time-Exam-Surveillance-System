@@ -2,20 +2,26 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Clock,
   Camera, User, Cpu, Sparkles, Filter, CheckCircle2, ShieldAlert,
-  Eye, Download, Video, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  Eye, Download, Video, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Loader2, Check, RotateCcw
 } from 'lucide-react';
+import { api } from '../services/api';
 
 function AlertPanel({ alerts, participants, onViewIncident }) {
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [statusOverrides, setStatusOverrides] = useState({});
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterSeverity, filterType, itemsPerPage]);
+  }, [filterSeverity, filterType, filterStatus, itemsPerPage]);
 
   const participantMap = useMemo(() => {
     const map = {};
@@ -24,10 +30,12 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
   }, [participants]);
 
   const filteredAlerts = useMemo(() => alerts.filter(alert => {
+    const effStatus = statusOverrides[alert.event_id] || alert.status || 'PRELIMINARY';
     if (filterSeverity !== 'all' && alert.severity !== filterSeverity) return false;
     if (filterType !== 'all' && alert.event_type !== filterType) return false;
+    if (filterStatus !== 'all' && effStatus !== filterStatus) return false;
     return true;
-  }), [alerts, filterSeverity, filterType]);
+  }), [alerts, filterSeverity, filterType, filterStatus, statusOverrides]);
 
   const totalPages = Math.ceil(filteredAlerts.length / itemsPerPage) || 1;
 
@@ -41,6 +49,54 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
     alerts.forEach(a => { if (counts[a.severity] !== undefined) counts[a.severity]++; });
     return counts;
   }, [alerts]);
+
+  const statusStyles = {
+    PRELIMINARY: {
+      badge: 'bg-[#ff9500]/15 text-[#ff9500] border-[#ff9500]/30',
+      label: 'Verifying with AI...',
+      pulse: true,
+      icon: <Loader2 className="w-3 h-3 animate-spin text-[#ff9500]" />
+    },
+    AI_CONFIRMED: {
+      badge: 'bg-[#ff3b30]/15 text-[#ff3b30] border-[#ff3b30]/30',
+      label: 'AI Confirmed',
+      pulse: false,
+      icon: <ShieldAlert className="w-3 h-3 text-[#ff3b30]" />
+    },
+    AI_CLEARED: {
+      badge: 'bg-[#34c759]/15 text-[#34c759] border-[#34c759]/30',
+      label: 'AI Cleared — Benign',
+      pulse: false,
+      icon: <CheckCircle2 className="w-3 h-3 text-[#34c759]" />
+    },
+    NEEDS_REVIEW: {
+      badge: 'bg-[#af52de]/15 text-[#af52de] border-[#af52de]/30',
+      label: 'Needs Human Review',
+      pulse: false,
+      icon: <AlertCircle className="w-3 h-3 text-[#af52de]" />
+    },
+    HUMAN_RESOLVED: {
+      badge: 'bg-[#0071e3]/15 text-[#0071e3] border-[#0071e3]/30',
+      label: 'Signed Off by Proctor',
+      pulse: false,
+      icon: <CheckCircle2 className="w-3 h-3 text-[#0071e3]" />
+    }
+  };
+
+  const handleUpdateStatus = async (eventId, newStatus, notes = '') => {
+    if (!eventId) return;
+    setUpdatingStatusId(eventId);
+    setActionError(null);
+    try {
+      await api.events.updateStatus(eventId, newStatus, notes);
+      setStatusOverrides(prev => ({ ...prev, [eventId]: newStatus }));
+    } catch (err) {
+      console.error('Failed to update event status:', err);
+      setActionError(`Failed to update: ${err.message || 'Server error'}`);
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
 
   const severityStyles = {
     CRITICAL: {
@@ -65,11 +121,11 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
     }
   };
 
-  const toggleExpanded = (index) => {
+  const toggleExpanded = (key) => {
     setExpandedIds(prev => {
       const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -91,28 +147,45 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
             </p>
           </div>
 
-          {/* Event Type Filter */}
-          <div className="flex items-center gap-2">
-            <Filter size={12} className="text-[#86868b]" />
+          {/* Lifecycle Status & Event Type Filters */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {/* Status Filter */}
             <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus:border-[#0071e3] rounded-xl px-3 py-1.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 cursor-pointer transition-all"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus:border-[#0071e3] rounded-xl px-3 py-1.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 cursor-pointer transition-all font-medium"
             >
-              <option value="all">All Anomaly Types</option>
-              <option value="PEEKING_NEIGHBOR_PAPER">Neighbor Peeking (Rubbernecking)</option>
-              <option value="PHONE_DETECTED">Phone Detected</option>
-              <option value="CHEAT_SHEET">Cheat Sheet</option>
-              <option value="COMMUNICATION">Communication</option>
-              <option value="LOOKING_AWAY">Looking Away</option>
-              <option value="ABNORMAL_POSTURE">Abnormal Posture</option>
-              <option value="FACE_OBSCURED">Face Obscured</option>
-              <option value="UNAUTHORIZED_ITEM">Unauthorized Item</option>
-              <option value="AUDIO_ANOMALY">Audio Anomaly</option>
-              <option value="ID_MISMATCH">ID Mismatch</option>
-              <option value="SEAT_VIOLATION">Seat Violation</option>
-              <option value="SUSPICIOUS_BEHAVIOR">Suspicious Behavior</option>
+              <option value="all">All Lifecycle States</option>
+              <option value="PRELIMINARY">🟡 Preliminary (AI Verifying)</option>
+              <option value="AI_CONFIRMED">🔴 AI Confirmed</option>
+              <option value="AI_CLEARED">🟢 AI Cleared (Benign)</option>
+              <option value="NEEDS_REVIEW">🟣 Needs Human Review</option>
+              <option value="HUMAN_RESOLVED">🔵 Signed Off (Resolved)</option>
             </select>
+
+            {/* Event Type Filter */}
+            <div className="flex items-center gap-1.5">
+              <Filter size={12} className="text-[#86868b]" />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus:border-[#0071e3] rounded-xl px-3 py-1.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 cursor-pointer transition-all"
+              >
+                <option value="all">All Anomaly Types</option>
+                <option value="PEEKING_NEIGHBOR_PAPER">Neighbor Peeking (Rubbernecking)</option>
+                <option value="PHONE_DETECTED">Phone Detected</option>
+                <option value="CHEAT_SHEET">Cheat Sheet</option>
+                <option value="COMMUNICATION">Communication</option>
+                <option value="LOOKING_AWAY">Looking Away</option>
+                <option value="ABNORMAL_POSTURE">Abnormal Posture</option>
+                <option value="FACE_OBSCURED">Face Obscured</option>
+                <option value="UNAUTHORIZED_ITEM">Unauthorized Item</option>
+                <option value="AUDIO_ANOMALY">Audio Anomaly</option>
+                <option value="ID_MISMATCH">ID Mismatch</option>
+                <option value="SEAT_VIOLATION">Seat Violation</option>
+                <option value="SUSPICIOUS_BEHAVIOR">Suspicious Behavior</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -194,7 +267,8 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
         ) : (
           paginatedAlerts.map((alert, index) => {
             const participant = alert.participant_id ? participantMap[alert.participant_id] : null;
-            const isExpanded = expandedIds.has(index);
+            const alertKey = alert.event_id || `alert-${index}`;
+            const isExpanded = expandedIds.has(alertKey);
             const style = severityStyles[alert.severity] || severityStyles.LOW;
             const confidencePct = Math.round((alert.confidence || 0) * 100);
 
@@ -202,7 +276,7 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
               <div
                 key={alert.event_id || alert.timestamp || index}
                 className={`bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] rounded-3xl p-4 sm:p-5 cursor-pointer transition-all border-l-4 ${style.border} hover:shadow-[0_6px_20px_rgba(0,0,0,0.04)] dark:hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)]`}
-                onClick={() => toggleExpanded(index)}
+                onClick={() => toggleExpanded(alertKey)}
               >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 p-2 rounded-2xl bg-black/5 dark:bg-white/10 flex-shrink-0">
@@ -218,6 +292,21 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase font-semibold border ${style.badge}`}>
                         {alert.severity}
                       </span>
+
+                      {/* Anomaly State Machine Badge */}
+                      {(() => {
+                        const effStatus = statusOverrides[alert.event_id] || alert.status || 'PRELIMINARY';
+                        const sStyle = statusStyles[effStatus] || statusStyles.PRELIMINARY;
+                        return (
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium border flex items-center gap-1.5 transition-all ${sStyle.badge} ${sStyle.pulse ? 'animate-pulse' : ''}`}
+                            title={`Status: ${sStyle.label}`}
+                          >
+                            {sStyle.icon}
+                            <span>{sStyle.label}</span>
+                          </span>
+                        );
+                      })()}
 
                       {participant && (
                         <div className="flex items-center gap-1.5 text-xs text-[#1d1d1f] dark:text-white bg-black/5 dark:bg-white/10 px-2.5 py-0.5 rounded-full">
@@ -406,6 +495,79 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
                             )}
                           </div>
                         </div>
+
+                        {/* Proctor Lifecycle State Controls */}
+                        {alert.event_id && (
+                          <div className="bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] rounded-2xl p-3.5 space-y-2">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-[#86868b] uppercase tracking-wider border-b border-black/[0.06] dark:border-white/[0.06] pb-1">
+                              <span>Proctor Lifecycle Actions</span>
+                              {updatingStatusId === alert.event_id && (
+                                <span className="flex items-center gap-1 text-[#0071e3]">
+                                  <Loader2 size={10} className="animate-spin" />
+                                  <span>Updating...</span>
+                                </span>
+                              )}
+                            </div>
+                            {actionError && updatingStatusId === null && (
+                              <div className="p-2 text-[11px] text-[#ff3b30] bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-xl">
+                                {actionError}
+                              </div>
+                            )}
+                            {(() => {
+                              const effStatus = statusOverrides[alert.event_id] || alert.status || 'PRELIMINARY';
+                              if (effStatus === 'HUMAN_RESOLVED') {
+                                return (
+                                  <div className="flex items-center justify-between gap-2 p-2 bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-xl text-xs text-[#0071e3]">
+                                    <span className="flex items-center gap-1.5 font-medium">
+                                      <Check size={13} />
+                                      <span>Signed Off by Proctor</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      disabled={updatingStatusId === alert.event_id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateStatus(alert.event_id, 'NEEDS_REVIEW', 'Re-opened by proctor for review');
+                                      }}
+                                      className="text-[11px] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white underline cursor-pointer"
+                                    >
+                                      Re-open
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={updatingStatusId === alert.event_id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateStatus(alert.event_id, 'HUMAN_RESOLVED', 'Signed off by proctor');
+                                    }}
+                                    className="px-2.5 py-1.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                                  >
+                                    <Check size={12} />
+                                    <span>Sign Off</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={updatingStatusId === alert.event_id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateStatus(alert.event_id, 'NEEDS_REVIEW', 'Flagged for human audit');
+                                    }}
+                                    className="px-2.5 py-1.5 bg-[#af52de]/15 hover:bg-[#af52de]/25 text-[#af52de] border border-[#af52de]/30 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                                  >
+                                    <AlertCircle size={12} />
+                                    <span>Flag Review</span>
+                                  </button>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
 
                         {/* Direct link to Incident Desk */}
                         {onViewIncident && alert.event_id && (

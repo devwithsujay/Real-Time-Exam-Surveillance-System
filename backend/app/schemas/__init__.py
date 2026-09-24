@@ -3,7 +3,8 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.models import (
-    ExamStatus, EventSeverity, EventType, ParticipantStatus, UserRole, ActionStatus, VideoAuditStatus
+    ExamStatus, EventSeverity, EventType, ParticipantStatus, UserRole, ActionStatus, VideoAuditStatus,
+    AnomalyStatus
 )
 
 
@@ -43,6 +44,7 @@ class ExamResponse(BaseModel):
     num_students: int
     num_cameras: int
     settings: Optional[Dict[str, Any]]
+    recording_path: Optional[str] = None
     created_at: datetime
     started_at: Optional[datetime]
     ended_at: Optional[datetime]
@@ -53,10 +55,15 @@ class ExamResponse(BaseModel):
     high_severity_events: Optional[int] = 0
 
 
+class ExamStartRequest(BaseModel):
+    record_full_session: Optional[bool] = None  # None = use global default
+
+
 class ExamStartResponse(BaseModel):
     exam_id: str
     status: ExamStatus
     started_at: datetime
+    recording_active: bool = False
     camera_status: List[Dict[str, Any]]
 
 
@@ -65,7 +72,20 @@ class ExamEndResponse(BaseModel):
     status: ExamStatus
     ended_at: datetime
     total_duration_minutes: float
+    recording_path: Optional[str] = None
     summary: Dict[str, Any]
+
+
+class ExamReanalyzeRequest(BaseModel):
+    sample_fps: int = Field(default=2, ge=1, le=10)
+    enable_vlm: bool = True
+
+
+class ExamReanalyzeResponse(BaseModel):
+    status: str
+    audit_id: str
+    exam_id: str
+    message: str
 
 
 # Participant Schemas
@@ -134,10 +154,25 @@ class EventResponse(BaseModel):
     analysis_data: Optional[Dict[str, Any]] = None
     evidence_clip_path: Optional[str] = None
     evidence_screenshot_path: Optional[str] = None
+    status: AnomalyStatus = AnomalyStatus.PRELIMINARY
     human_reviewed: bool
     review_notes: Optional[str]
     reviewed_by: Optional[str]
     reviewed_at: Optional[datetime]
+
+
+class EventStatusUpdateRequest(BaseModel):
+    status: AnomalyStatus
+    review_notes: Optional[str] = None
+    severity_override: Optional[EventSeverity] = None
+
+
+class EventStatusUpdateResponse(BaseModel):
+    event_id: str
+    status: AnomalyStatus
+    review_notes: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
 
 
 class EventReviewRequest(BaseModel):
@@ -198,6 +233,7 @@ class WSAlertPayload(BaseModel):
     camera_id: int
     event_type: EventType
     severity: EventSeverity
+    status: AnomalyStatus = AnomalyStatus.PRELIMINARY
     timestamp: datetime
     description: str
     confidence: float = 0.0
