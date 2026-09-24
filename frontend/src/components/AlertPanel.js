@@ -3,7 +3,7 @@ import {
   AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Clock,
   Camera, User, Cpu, Sparkles, Filter, CheckCircle2, ShieldAlert,
   Eye, Download, Video, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Loader2, Check
+  Loader2, Check, RotateCcw
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -72,7 +72,7 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
     },
     NEEDS_REVIEW: {
       badge: 'bg-[#af52de]/15 text-[#af52de] border-[#af52de]/30',
-      label: 'Needs Human Review',
+      label: 'Needs Review (Unclear View)',
       pulse: false,
       icon: <AlertCircle className="w-3 h-3 text-[#af52de]" />
     },
@@ -177,7 +177,7 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
               <option value="PRELIMINARY">🟡 Preliminary (AI Verifying)</option>
               <option value="AI_CONFIRMED">🔴 AI Confirmed</option>
               <option value="AI_CLEARED">🟢 AI Cleared (Benign)</option>
-              <option value="NEEDS_REVIEW">🟣 Needs Human Review</option>
+              <option value="NEEDS_REVIEW">🟣 Needs Review (Unclear/Obscured)</option>
               <option value="HUMAN_RESOLVED">🔵 Signed Off (Resolved)</option>
             </select>
 
@@ -532,29 +532,54 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
                               </div>
                             )}
 
-                            {/* On-Demand AI Verification Button (Tier 2 VLM) */}
-                            <button
-                              type="button"
-                              disabled={reanalyzingId === alert.event_id || updatingStatusId === alert.event_id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRerunAI(alert.event_id);
-                              }}
-                              className="w-full px-2.5 py-1.5 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] dark:text-[#0a84ff] border border-[#0071e3]/25 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                              title="Ask the local VLM to inspect this keyframe freshly"
-                            >
-                              {reanalyzingId === alert.event_id ? (
-                                <>
-                                  <Loader2 size={12} className="animate-spin text-[#0071e3]" />
-                                  <span>AI Re-evaluating with VLM...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Sparkles size={12} className="text-[#0071e3]" />
-                                  <span>Trigger AI Verification (VLM)</span>
-                                </>
-                              )}
-                            </button>
+                            {/* Unclear / Obscured Frame Warning Banner */}
+                            {(() => {
+                              const effStatus = statusOverrides[alert.event_id] || alert.status || 'PRELIMINARY';
+                              if (effStatus === 'NEEDS_REVIEW') {
+                                return (
+                                  <div className="p-2.5 bg-[#af52de]/10 border border-[#af52de]/25 rounded-xl text-xs text-[#af52de] flex items-start gap-2">
+                                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="font-semibold">Needs Human Review: View Unclear</div>
+                                      <div className="text-[11px] opacity-90 mt-0.5 leading-relaxed">
+                                        The AI could not confidently detect the scene because the frame is blurry, lighting is degraded, or the candidate view is occluded. Please inspect manually.
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+
+                            {/* Background Automated VLM Indicator & Force Re-verify */}
+                            <div className="flex items-center justify-between text-xs pt-0.5 pb-1">
+                              <span className="text-[11px] text-[#86868b] flex items-center gap-1.5 font-medium">
+                                <Sparkles size={11} className="text-[#0071e3]" />
+                                <span>Background AI Verification</span>
+                              </span>
+                              <button
+                                type="button"
+                                disabled={reanalyzingId === alert.event_id || updatingStatusId === alert.event_id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRerunAI(alert.event_id);
+                                }}
+                                className="text-[11px] text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Force on-demand VLM re-evaluation of this keyframe"
+                              >
+                                {reanalyzingId === alert.event_id ? (
+                                  <>
+                                    <Loader2 size={11} className="animate-spin text-[#0071e3]" />
+                                    <span>Re-evaluating...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RotateCcw size={11} />
+                                    <span>Re-evaluate</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
                             {(() => {
                               const effStatus = statusOverrides[alert.event_id] || alert.status || 'PRELIMINARY';
                               if (effStatus === 'HUMAN_RESOLVED') {

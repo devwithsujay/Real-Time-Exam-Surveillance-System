@@ -1223,14 +1223,38 @@ async def rerun_event_analysis_endpoint(
             description=event.description or ""
         )
 
-    vlm_res = await vlm.analyze_image_file(event.evidence_screenshot_path, prompt=prompt)
-
-    if vlm_res.verdict == "CONFIRMED_VIOLATION" or vlm_res.phone_detected or vlm_res.cheating_detected or vlm_res.peeking_detected or vlm_res.earbud_detected:
-        new_status = AnomalyStatus.AI_CONFIRMED
-    elif vlm_res.verdict == "FALSE_POSITIVE" or vlm_res.plausible is False:
-        new_status = AnomalyStatus.AI_CLEARED
-    else:
+    clarity = check_image_clarity(event.evidence_screenshot_path)
+    if clarity["is_unclear"]:
         new_status = AnomalyStatus.NEEDS_REVIEW
+        vlm_reasoning = f"Needs Human Review: {clarity['reason']} — AI vision obscured."
+        vlm_conf = 0.0
+    else:
+        vlm_res = await vlm.analyze_image_file(event.evidence_screenshot_path, prompt=prompt)
+        is_unclear_view = (
+            vlm_res.visibility in ["obstructed", "unclear", "poor", "partial"] or
+            vlm_res.verdict == "INCONCLUSIVE" or
+            ("unclear" in (vlm_res.quick_reasoning or "").lower()) or
+            ("cannot determine" in (vlm_res.quick_reasoning or "").lower())
+        )
+        is_confirmed = (
+            vlm_res.verdict == "CONFIRMED_VIOLATION" or
+            vlm_res.phone_detected or
+            vlm_res.cheating_detected or
+            vlm_res.peeking_detected or
+            vlm_res.earbud_detected or
+            vlm_res.talking_detected or
+            (vlm_res.plausible is True and vlm_res.confidence >= 0.70)
+        )
+        if is_unclear_view and not is_confirmed:
+            new_status = AnomalyStatus.NEEDS_REVIEW
+            vlm_reasoning = f"Needs Human Review: Camera view is occluded or ambiguous ({vlm_res.quick_reasoning or 'AI unable to observe candidate'})."
+        elif is_confirmed:
+            new_status = AnomalyStatus.AI_CONFIRMED
+            vlm_reasoning = vlm_res.description or vlm_res.quick_reasoning or "AI confirmed violation in surveillance keyframe."
+        else:
+            new_status = AnomalyStatus.AI_CLEARED
+            vlm_reasoning = vlm_res.description or vlm_res.quick_reasoning or "AI cleared: Normal candidate behavior observed in clear frame."
+        vlm_conf = vlm_res.confidence
 
     event.status = new_status
     data = {}
@@ -1240,9 +1264,10 @@ async def rerun_event_analysis_endpoint(
     except Exception:
         data = {}
 
-    data["vlm_reasoning"] = vlm_res.description or vlm_res.quick_reasoning or "Forensic re-analysis completed."
-    data["vlm_confidence"] = vlm_res.confidence
+    data["vlm_reasoning"] = vlm_reasoning
+    data["vlm_confidence"] = vlm_conf
     data["vlm_status"] = new_status.value
+    data["vlm_clarity"] = clarity
     data["vlm_reanalyzed_by"] = current_user.username if current_user else "proctor"
     data["vlm_reanalyzed_at"] = datetime.now(timezone.utc).isoformat()
     event.analysis_data = json.dumps(data)
@@ -1251,7 +1276,7 @@ async def rerun_event_analysis_endpoint(
     db.refresh(event)
 
     await broadcast_event(str(event.exam_id), event)
-    return event
+    return _event_to_response(event)
 
 
 @app.get("/api/events/{event_id}/screenshot")
@@ -1789,13 +1814,72 @@ async def broadcast_event(exam_id: str, event):
     await manager.broadcast(exam_id, message)
 
 
+def check_image_clarity(image_path: str) -> dict:
+    """
+    Evaluates physical frame clarity and lighting:
+    - Laplacian variance for blur (motion blur, defocus)
+    - Mean pixel intensity for extreme lighting (pitch black or glare blowout)
+    """
+    if not image_path or not os.path.isfile(image_path):
+        return {"is_unclear": True, "reason": "Missing keyframe file", "blur_score": 0.0, "brightness": 0.0}
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            return {"is_unclear": True, "reason": "Unreadable image file", "blur_score": 0.0, "brightness": 0.0}
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        brightness = float(gray.mean())
+
+        if blur_score < 30.0:
+            return {"is_unclear": True, "reason": f"Severe camera blur / motion artifact (sharpness {blur_score:.1f})", "blur_score": blur_score, "brightness": brightness}
+        if brightness < 20.0:
+            return {"is_unclear": True, "reason": f"Severe underexposure / pitch black feed (brightness {brightness:.1f})", "blur_score": blur_score, "brightness": brightness}
+        if brightness > 240.0:
+            return {"is_unclear": True, "reason": f"Severe glare / overexposure blowout (brightness {brightness:.1f})", "blur_score": blur_score, "brightness": brightness}
+
+        return {"is_unclear": False, "reason": "Clear frame", "blur_score": blur_score, "brightness": brightness}
+    except Exception as e:
+        return {"is_unclear": True, "reason": f"Clarity analysis error: {e}", "blur_score": 0.0, "brightness": 0.0}
+
+
 async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: Optional[str], event_type_val: str, description: Optional[str] = ""):
     """
     Automatic background Tier-2 verification pass on preliminary event screenshot.
     Uses multi-provider VLM (LM Studio / Ollama) to automatically confirm violations (AI_CONFIRMED)
-    or clear false alarms (AI_CLEARED) without requiring human proctor clicks.
+    or clear false alarms (AI_CLEARED). Automatically flags NEEDS_REVIEW ONLY when the image is
+    unclear, blurry, obstructed, or the VLM cannot determine what is happening.
     """
     if not screenshot_path or not os.path.isfile(screenshot_path):
+        return
+
+    # Step 1: Automated Computer Vision physical clarity check
+    clarity = check_image_clarity(screenshot_path)
+    if clarity["is_unclear"]:
+        new_status = AnomalyStatus.NEEDS_REVIEW
+        reasoning = f"Needs Human Review: {clarity['reason']} — AI vision obscured."
+        db = next(get_db())
+        try:
+            ev = get_event(db, event_id)
+            if ev and ev.status == AnomalyStatus.PRELIMINARY:
+                ev.status = new_status
+                data = {}
+                try:
+                    if ev.analysis_data:
+                        data = json.loads(ev.analysis_data) if isinstance(ev.analysis_data, str) else dict(ev.analysis_data)
+                except Exception:
+                    data = {}
+                data["vlm_reasoning"] = reasoning
+                data["vlm_confidence"] = 0.0
+                data["vlm_status"] = new_status.value
+                data["vlm_clarity"] = clarity
+                data["vlm_verified_at"] = datetime.now(timezone.utc).isoformat()
+                ev.analysis_data = json.dumps(data)
+                db.commit()
+                db.refresh(ev)
+                await broadcast_event(exam_id, ev)
+                logger.info(f"Auto-VLM flagged event {event_id} as NEEDS_REVIEW due to degraded image quality: {clarity['reason']}")
+        finally:
+            db.close()
         return
 
     vlm = get_vlm_client()
@@ -1803,7 +1887,7 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
         return
 
     try:
-        # Build instant surety verification prompt
+        # Step 2: Instant surety verification prompt
         prompt = build_instant_surety_prompt(candidate_category=event_type_val, cv_confidence=0.85)
         vlm_res = await vlm.analyze_image_file(screenshot_path, prompt=prompt)
 
@@ -1811,9 +1895,15 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
         if not vlm_res.raw_response:
             vlm_res = await vlm.analyze_image_file(screenshot_path)
 
-        # If VLM is unreachable or offline, keep in preliminary or needs review
         if not vlm_res.raw_response and vlm_res.inference_time_ms == 0:
             return
+
+        is_unclear_view = (
+            vlm_res.visibility in ["obstructed", "unclear", "poor", "partial"] or
+            vlm_res.verdict == "INCONCLUSIVE" or
+            ("unclear" in (vlm_res.quick_reasoning or "").lower()) or
+            ("cannot determine" in (vlm_res.quick_reasoning or "").lower())
+        )
 
         is_confirmed = (
             vlm_res.phone_detected or
@@ -1824,18 +1914,17 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
             vlm_res.verdict == "CONFIRMED_VIOLATION" or
             (vlm_res.plausible is True and vlm_res.confidence >= 0.70)
         )
-        is_cleared = (
-            vlm_res.plausible is False or
-            vlm_res.verdict == "FALSE_POSITIVE" or
-            (not is_confirmed and vlm_res.confidence == 0.0 and vlm_res.raw_response != "")
-        )
 
-        if is_confirmed:
-            new_status = AnomalyStatus.AI_CONFIRMED
-        elif is_cleared:
-            new_status = AnomalyStatus.AI_CLEARED
-        else:
+        # Needs human review ONLY if view is unclear/occluded and no obvious violation is present
+        if is_unclear_view and not is_confirmed:
             new_status = AnomalyStatus.NEEDS_REVIEW
+            reasoning = f"Needs Human Review: Camera view is occluded or ambiguous ({vlm_res.quick_reasoning or 'AI unable to observe candidate'})."
+        elif is_confirmed:
+            new_status = AnomalyStatus.AI_CONFIRMED
+            reasoning = vlm_res.description or vlm_res.quick_reasoning or "AI confirmed suspicious indicators in surveillance keyframe."
+        else:
+            new_status = AnomalyStatus.AI_CLEARED
+            reasoning = vlm_res.description or vlm_res.quick_reasoning or "AI cleared: Normal candidate behavior observed in clear frame."
 
         db = next(get_db())
         try:
@@ -1848,12 +1937,11 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
                         data = json.loads(ev.analysis_data) if isinstance(ev.analysis_data, str) else dict(ev.analysis_data)
                 except Exception:
                     data = {}
-                data["vlm_reasoning"] = vlm_res.description or vlm_res.quick_reasoning or (
-                    "AI confirmed suspicious indicators in surveillance keyframe." if is_confirmed else "AI cleared false positive: normal candidate behavior observed."
-                )
+                data["vlm_reasoning"] = reasoning
                 data["vlm_confidence"] = vlm_res.confidence
                 data["vlm_status"] = new_status.value
                 data["vlm_inference_ms"] = vlm_res.inference_time_ms
+                data["vlm_clarity"] = clarity
                 data["vlm_verified_at"] = datetime.now(timezone.utc).isoformat()
                 ev.analysis_data = json.dumps(data)
                 db.commit()
@@ -1865,6 +1953,7 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
 
     except Exception as exc:
         logger.warning(f"Auto-VLM background verification failed for event {event_id}: {exc}")
+
 
 
 async def _log_and_broadcast(exam_id: str, event_data, frame, overlays):

@@ -122,13 +122,16 @@ function SurveillanceDashboard() {
                 return [updatedPayload, ...prev.slice(0, 199)];
               });
               setAlerts(prev => {
-                const idx = prev.findIndex(a => a.event_id === updatedPayload.event_id);
+                const idx = prev.findIndex(a =>
+                  a.event_id === updatedPayload.event_id ||
+                  (!a.event_id && a.track_id === updatedPayload.track_id)
+                );
                 if (idx >= 0) {
                   const next = [...prev];
                   next[idx] = { ...next[idx], ...updatedPayload };
                   return next;
                 }
-                return prev;
+                return [updatedPayload, ...prev.slice(0, 99)];
               });
             } else if (message.type === 'analytics') {
               setAnalytics(prev => ({
