@@ -57,6 +57,8 @@ from app.crud import (
 from app.services.camera_manager import CameraManager
 from app.services.audio_level import audio_level_service
 from app.services.detection_engine import DetectionEngine
+from app.services.event_logger import EventLogger, EventData, get_event_logger
+from app.services.report_generator import generate_pdf_report
 
 from app.services.mediapipe_analyzer import MediaPipeAnalyzer
 from app.services.anomaly_detector import AnomalyDetector, Alert, AlertType, AlertSeverity, MoondreamAnalysis as AnomalyMoondreamAnalysis
