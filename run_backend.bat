@@ -9,6 +9,6 @@ if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scr
 ) else (
     set "PY_EXE=python"
 )
-echo [*] Starting ARGUS FastAPI Backend on port 8000...
-"%PY_EXE%" -u -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info
+echo [*] Starting ARGUS FastAPI Backend on port 8000 (with auto-reload)...
+"%PY_EXE%" -u -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level info
 pause
