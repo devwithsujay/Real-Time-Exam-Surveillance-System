@@ -6,7 +6,7 @@
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-FF6F00.svg)](https://ultralytics.com/)
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-FaceLandmarker-007FFF.svg)](https://developers.google.com/mediapipe)
 [![VLM Ready](https://img.shields.io/badge/VLM-LM_Studio_%7C_Ollama-7928CA.svg)](https://lmstudio.ai/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Proprietary / Source-Available](https://img.shields.io/badge/License-Proprietary%20%2F%20Source--Available-red.svg)](LICENSE)
 
 An autonomous AI-powered exam surveillance and proctoring platform named after **Argus Panoptes** — the all-seeing hundred-eyed giant of Greek mythology. **ARGUS** monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, records full-length exam sessions asynchronously, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
 
@@ -522,6 +522,13 @@ For engineering teams looking to scale ARGUS from single-room testing to high-co
 
 ---
 
-## 📄 License
+## 📄 License & Proprietary Rights
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Copyright © 2026 Sujay ([devwithsujay](https://github.com/devwithsujay)). All Rights Reserved.
+
+This software is **Source-Available**:
+- **Permitted**: Local cloning, academic research review, and personal educational evaluation.
+- **Strictly Prohibited**: Any commercial exploitation, SaaS hosting, institutional deployment (universities, testing centers), or closed-source redistribution without prior written authorization.
+
+For enterprise licensing, university pilot deployments, or commercial integration inquiries, contact:  
+**GitHub**: [@devwithsujay](https://github.com/devwithsujay) · See [LICENSE](LICENSE) for full legal terms.
