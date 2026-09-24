@@ -1851,7 +1851,17 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
     Uses multi-provider VLM (LM Studio / Ollama) to automatically confirm violations (AI_CONFIRMED)
     or clear false alarms (AI_CLEARED). Automatically flags NEEDS_REVIEW ONLY when the image is
     unclear, blurry, obstructed, or the VLM cannot determine what is happening.
+    Guaranteed idempotent: once an event is marked, it will never be checked or overwritten again.
     """
+    # Early bailout: if event is already resolved or marked, do not check again
+    db = next(get_db())
+    try:
+        current_ev = get_event(db, event_id)
+        if not current_ev or current_ev.status != AnomalyStatus.PRELIMINARY:
+            return
+    finally:
+        db.close()
+
     if not screenshot_path or not os.path.isfile(screenshot_path):
         new_status = AnomalyStatus.NEEDS_REVIEW
         reasoning = "Needs Human Review: No keyframe image recorded — visual AI inspection unavailable."
@@ -2009,7 +2019,7 @@ async def sweep_pending_preliminary_events(exam_id: Optional[str] = None):
     try:
         query = db.query(Event).filter(Event.status == AnomalyStatus.PRELIMINARY)
         if exam_id:
-            query = query.filter(Event.exam_id == str(exam_id))
+            query = query.filter(Event.exam_id == exam_id)
         pending_events = query.limit(25).all()
         for ev in pending_events:
             ev_type_str = ev.event_type.value if hasattr(ev.event_type, 'value') else str(ev.event_type)
