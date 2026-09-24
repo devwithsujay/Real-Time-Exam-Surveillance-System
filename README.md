@@ -5,23 +5,43 @@
 [![React](https://img.shields.io/badge/React-18.0%2B-61DAFB.svg)](https://reactjs.org/)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-FF6F00.svg)](https://ultralytics.com/)
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-FaceLandmarker-007FFF.svg)](https://developers.google.com/mediapipe)
+[![VLM Ready](https://img.shields.io/badge/VLM-LM_Studio_%7C_Ollama-7928CA.svg)](https://lmstudio.ai/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An autonomous AI-powered exam surveillance and proctoring platform named after **Argus Panoptes** — the all-seeing hundred-eyed giant of Greek mythology. **ARGUS** monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
+An autonomous AI-powered exam surveillance and proctoring platform named after **Argus Panoptes** — the all-seeing hundred-eyed giant of Greek mythology. **ARGUS** monitors exam environments in real-time, detects behavioral anomalies using state-of-the-art computer vision and Vision-Language Models (VLMs), manages live candidate attendance, records full-length exam sessions asynchronously, and generates tamper-evident forensic compliance dossiers for academic institutions and certification centers.
+
+---
+
+## 📑 Table of Contents
+1. [Key Capabilities](#-key-capabilities)
+2. [Formal Architecture & Methodology](#-formal-architecture--methodology)
+3. [Quick Start](#-quick-start)
+   - [Option A: 1-Click Unified Launch (Windows)](#option-a-1-click-unified-launch-windows)
+   - [Option B: Dedicated Launchers](#option-b-dedicated-launchers)
+   - [Option C: Manual CLI Step-by-Step](#option-c-manual-cli-step-by-step)
+4. [Default Test Accounts](#-default-test-accounts)
+5. [VLM Configuration Guide (LM Studio & Ollama)](#-vlm-configuration-guide)
+6. [Anomaly State Machine & Triage Lifecycle](#-anomaly-state-machine--triage-lifecycle)
+7. [Continuous Session Recording & Forensic Re-Analysis](#-continuous-session-recording--forensic-re-analysis)
+8. [API Reference](#-api-reference)
+9. [Project Directory Layout](#-project-directory-layout)
+10. [Testing & Quality Verification](#-testing--quality-verification)
+11. [Production Scaling Roadmap](#-production-scaling-roadmap)
+12. [License](#-license)
 
 ---
 
 ## 🌟 Key Capabilities
 
 ### 1. Tactical Multi-Person Computer Vision
-- **YOLOv8 + ByteTrack**: Real-time multi-candidate detection, bounding-box tracking, and persistent spatial tracking IDs across frame drops.
-- **Unauthorized Item Detection**: Autonomous detection of mobile phones, concealed cheat sheets, smart devices, and books.
-- **MediaPipe 3D Face Landmarker**: High-fidelity 478-point facial mesh tracking head pose (pitch, yaw, roll), abnormal posture departures, calibrated 3D optical eye gaze vectors ($\theta_{\text{pitch}}$, $\theta_{\text{yaw}}$ in degrees), and face obscuration.
-- **Decibel Audio Telemetry**: Microphone RMS sound level capture (dB) with dynamic 100ms sampling window (1,600 samples at 16 kHz) for speech and disturbance alerting.
+- **YOLOv8 + ByteTrack**: Real-time multi-candidate detection, spatial bounding-box tracking, and persistent tracking IDs (`TRK #...`) across transient occlusions and frame drops.
+- **Unauthorized Item Detection**: Autonomous detection of cell phones, concealed cheat sheets, wearable smart devices, and books.
+- **MediaPipe 3D Face Landmarker**: High-fidelity 478-point facial mesh computing head pose (pitch, yaw, roll), abnormal posture departures, calibrated 3D optical eye gaze vectors ($\theta_{\text{pitch}}$, $\theta_{\text{yaw}}$ in degrees), and face obscuration checks.
+- **Decibel Audio Telemetry**: Microphone RMS sound level capture (dB) with dynamic 100ms sampling windows (1,600 samples at 16 kHz) for speech and ambient disturbance alerting.
 
-### 2. Multimodal VLM Behavioral Reasoning
+### 2. Multimodal VLM Semantic Reasoning
 - **Multi-Provider VLM Engine**: Unified visual reasoning client supporting both local **LM Studio** (`/v1`) and **Ollama** (`/api/generate`) with automatic model discovery (`/models`, `/api/tags`) and structured JSON schema parsing.
-- **Deep Contextual Inspection**: Suspicious candidate crops are routed to Vision-Language Models (e.g. Qwen2.5-VL, LLaVA, Moondream) to eliminate false positives and verify cheating intent (hidden earpieces, whispering, peeking).
+- **Deep Contextual Inspection**: Suspicious candidate crops are routed to Vision-Language Models (e.g. Qwen2.5-VL, Qwen3-VL, LLaVA, Moondream) to eliminate false positives and verify cheating intent (hidden earpieces, whispering, peeking).
 - **Forensic Reasoning Logs**: Every flagged infraction includes natural language proctor notes and VLM rationales attached to the incident record.
 
 ### 3. Live Dynamic Candidate Roster & Attendance Desk
@@ -30,16 +50,16 @@ An autonomous AI-powered exam surveillance and proctoring platform named after *
 - **Proctor Attendance Desk**: Search candidates by name or seat, toggle check-ins, or trigger 1-click **"Mark All Present"** batch verification.
 - **Global Attendance Telemetry**: Live verified ratio meters (e.g., `29 of 30 Verified · 97%`) visible across the top command bar and workspace tabs.
 
-### 4. Obsidian Dark Command Center & Anomaly Triage
-- **Obsidian Dark Design**: Linear/Vercel-inspired dark theme (`#09090b` / `#0f0f12`), frosted glass cards (`.glass-panel`), and custom dark scrollbars.
-- **Tactical Camera Monitor HUD**: High-tech feed framing with resolution badges (`LIVE 1080p · 30 FPS`), tactical bounding box overlays (`TRK #...`), and live stream latency pills.
+### 4. Apple HIG Command Center & Anomaly Triage
+- **Apple Human Interface Design System**: Clean, clinical Cupertino-inspired aesthetic (`#f5f5f7` canvas, `#ffffff` elevated squircle cards, 0.5px hairline borders, and SF Pro/Inter typography) with built-in Apple Dark Pro mode support.
+- **Tactical Camera Monitor HUD**: High-tech feed framing with resolution badges (`LIVE 1080p · 30 FPS`), tactical bounding box overlays, and live stream latency indicators.
 - **Anomaly State Machine Triage**: Dynamic visual badges and filterable status lifecycle (`PRELIMINARY`, `AI_CONFIRMED`, `AI_CLEARED`, `NEEDS_REVIEW`, `HUMAN_RESOLVED`, `ERROR`) with 1-click proctor sign-off.
 - **Auditor Video Inspection Desk**: Scrub recorded evidence clips frame-by-frame with custom timecode playback and speed controls.
 
 ### 5. Continuous Session Recording, Forensics & Media Exports
 - **Continuous Full Exam Session Recording**: Thread-decoupled async recording engine (`SessionVideoRecorder`) with UI toggle, saving entire exam sessions into browser-playable faststart H.264 MP4 format with zero frame drop in surveillance.
 - **1-Click Whole-Exam Re-Analysis**: Launch post-hoc forensic video audit scans (`POST /api/exams/{id}/reanalyze`) over recorded sessions with interactive timecode-indexed incident heatmaps.
-- **JPEG-Compressed Ring Buffer**: 45-second circular ring buffer in RAM with 99.46% memory compression, extracting 15-second MP4 evidence clips on demand.
+- **JPEG-Compressed Ring Buffer**: 45-second circular ring buffer in RAM with 99.46% memory compression (~19 MB per camera), extracting 15-second MP4 evidence clips on demand.
 - **Exportable PDF Compliance Dossiers**: Server-side ReportLab document synthesis including session telemetry, infraction breakdowns, candidate risk scorecards, and keyframe evidence snapshots.
 - **Media Evidence Exports**: 1-click downloads for full exam session MP4 recordings, 15s incident clips, high-resolution keyframes, and raw structured `.json` telemetry.
 
@@ -49,7 +69,9 @@ An autonomous AI-powered exam surveillance and proctoring platform named after *
 
 ---
 
-## 🏛️ System Architecture
+## 🏛️ Formal Architecture & Methodology
+
+ARGUS is designed around a multi-tier decoupled surveillance architecture. Comprehensive formal diagrams for research papers and IEEE-style project reports are maintained in [CHAPTER_2_DIAGRAMS.md](CHAPTER_2_DIAGRAMS.md) and [MASTER_PROCTORING_ARCHITECTURE.md](MASTER_PROCTORING_ARCHITECTURE.md).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -114,6 +136,72 @@ An autonomous AI-powered exam surveillance and proctoring platform named after *
 └──────────────────────────────────────────────────────────────┘
 ```
 
+### Formal Methodology Flowcharts
+
+```mermaid
+flowchart TB
+    subgraph INGEST["1. Ingestion Layer"]
+        CAM["Live Video Feeds\n(USB / RTSP / Video File)"]
+        MIC["Audio Ingestion\n(16 kHz Mono / 100ms Windows)"]
+    end
+
+    subgraph VISION["2. Real-Time CV Pipeline (Tier 1)"]
+        DET["YOLOv8 + ByteTrack\n(Candidate & Contraband Detection)"]
+        MESH["MediaPipe 3D Mesh (478 pts)\n(Head Pose & 3D Gaze Vectors)"]
+        AUDIO_S["Audio Level Service\n(RMS Decibel Thresholding)"]
+        ROSTER["Candidate Roster Engine\n(Biometric Auto Check-in)"]
+    end
+
+    subgraph REASONING["3. Dual-Tier Reasoning & Triage (Tier 2 & 3)"]
+        ANOMALY["Anomaly Detection Engine\n(State Machine Lifecycle)"]
+        VLM["Multi-Provider VLM\n(LM Studio / Ollama Qwen / LLaVA)"]
+        BUFFER["45s JPEG Ring Buffer\n(99.46% RAM Compression)"]
+        RECORDER["Continuous Session Recorder\n(Async H.264 Faststart MP4)"]
+    end
+
+    subgraph DATA["4. Persistence & API Layer"]
+        DB[("SQLite WAL Mode /\nPostgreSQL")]
+        API["FastAPI Engine\n(REST API & Binary WebSockets)"]
+    end
+
+    subgraph UI["5. Apple HIG Proctor Command Center"]
+        HUD["Tactical Video HUD\n(Bounding Overlays & Telemetry)"]
+        TRIAGE["Alert Threat Matrix\n(Triage Badges & Quick Sign-off)"]
+        AUDIT["Forensic Video Desk\n(15s Clip Scrub & PDF Dossier)"]
+    end
+
+    CAM --> DET & MESH & BUFFER & RECORDER
+    MIC --> AUDIO_S
+    DET --> ROSTER & ANOMALY
+    MESH --> ANOMALY
+    AUDIO_S --> ANOMALY
+    ANOMALY <--> VLM
+    ANOMALY --> BUFFER
+    ANOMALY --> DB
+    ROSTER --> DB
+    DB --> API
+    API ==> HUD & TRIAGE & AUDIT
+```
+
+#### Multi-Tier Anomaly Escalation & Verification Flow
+```mermaid
+flowchart LR
+    A["Raw Frame (30 FPS)"] --> B["Tier 1: CV Trigger\n(YOLOv8 + MediaPipe)\n~20-40 ms"]
+    B -->|Flag Detected| C{"N Frames\nPersistence?"}
+    B -->|Normal| Z["Normal Routine"]
+    C -->|Transient| Z
+    C -->|Persistent| D["Tier 2: Async VLM Verification\n(LM Studio / Ollama)\n~1.0 s"]
+    D -->|False Alarm| E["AI_CLEARED\n(Auto-suppressed)"]
+    D -->|Ambiguous| F["NEEDS_REVIEW\n(Proctor Attention)"]
+    D -->|Confirmed| G["AI_CONFIRMED\n(15s Evidence Sliced)"]
+    F --> H["Tier 3: Human Proctor Resolution\n(Sign-off / Dismiss via UI)"]
+    G --> H
+    H --> I["HUMAN_RESOLVED\n(Tamper-Evident Dossier)"]
+```
+
+> [!NOTE]
+> Additional formal IEEE/university project report diagrams (including Head Pose Euler vectors, Neighbour Peeking spatial geometry, and Frame Queue thread models) are available in [CHAPTER_2_DIAGRAMS.md](CHAPTER_2_DIAGRAMS.md).
+
 ---
 
 ## 🚀 Quick Start
@@ -123,15 +211,16 @@ An autonomous AI-powered exam surveillance and proctoring platform named after *
 - Node.js 18+ and npm
 - USB webcam, RTSP stream, or test video file
 - *(Optional)* NVIDIA GPU with CUDA for accelerated YOLOv8 & MediaPipe inference
+- *(Optional)* [LM Studio](https://lmstudio.ai/) or [Ollama](https://ollama.com/) for VLM inspection
 
 ---
 
-### Option A: 1-Click Launch (Windows)
+### Option A: 1-Click Unified Launch (Windows)
 
-The repository includes a pre-configured automation script that auto-detects Python, ensures the local SQLite database directory exists, initializes `.env` from `.env.example`, and launches both Backend and Frontend servers:
+The repository includes an automated master batch script that auto-detects Python, ensures the local SQLite database directory exists, initializes `.env` from `.env.example`, and launches both Backend and Frontend servers concurrently:
 
 ```cmd
-# 1. Clone your repository
+# 1. Clone repository
 git clone https://github.com/devwithsujay/Real-Time-Exam-Surveillance-System.git
 cd Real-Time-Exam-Surveillance-System
 
@@ -148,14 +237,32 @@ start_project.bat
 
 ---
 
-### Option B: Manual Step-by-Step Launch
+### Option B: Dedicated Launchers
+
+If you prefer launching individual services in separate terminals:
+
+```cmd
+# Launch Backend in its own window
+run_backend.bat
+
+# Launch Frontend in its own window
+run_frontend.bat
+```
+
+---
+
+### Option C: Manual CLI Step-by-Step
 
 #### 1. Backend Server
 ```bash
-# Install Python dependencies
+# Activate virtual environment if configured
+# Windows: venv\Scripts\activate
+# Linux/macOS: source venv/bin/activate
+
+# Install Python requirements
 pip install -r requirements.txt
 
-# Start FastAPI backend
+# Run FastAPI with Uvicorn
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
@@ -168,15 +275,92 @@ npm start
 
 ---
 
-### Default Test Staff Accounts
+## 👥 Default Test Accounts
 
-Staff accounts are automatically seeded into the database on first run:
+Staff accounts are automatically seeded into the database on first startup:
 
 | Role | Username | Default Password | Permissions |
 | :--- | :--- | :--- | :--- |
-| **Administrator** | `admin` | `Admin@12345` | Full system governance, staff management, exam hall creation |
-| **Chief Auditor** | `auditor1` | `Auditor@12345` | Forensic evidence inspection, PDF compliance export, audit logs |
-| **Exam Proctor** | `proctor1` | `Proctor@12345` | Live video HUD, attendance desk, real-time infraction flags |
+| **Administrator** | `admin` | `Admin@12345` | Full system governance, staff directory management, exam hall creation |
+| **Chief Auditor** | `auditor1` | `Auditor@12345` | Forensic evidence review, PDF compliance export, audit log inspection |
+| **Exam Proctor** | `proctor1` | `Proctor@12345` | Live video HUD, attendance desk, real-time anomaly triage & sign-off |
+
+---
+
+## 🧠 VLM Configuration Guide
+
+ARGUS features a **multi-provider VLM client** (`backend/app/services/vlm_client.py`) supporting both **LM Studio** and **Ollama**.
+
+In your `.env` file or environment variables:
+
+```env
+# Multi-Provider Toggle: "lmstudio" or "ollama"
+VLM_ENABLED=true
+VLM_PROVIDER=lmstudio
+
+# --- LM Studio Configuration ---
+VLM_BASE_URL=http://127.0.0.1:1234/v1
+VLM_MODEL=qwen/qwen3-vl-4b
+VLM_MAX_TOKENS=512
+VLM_TIMEOUT=60
+
+# --- Ollama Configuration ---
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llava:latest
+```
+
+### Running with LM Studio
+1. Open LM Studio and start the local server on `http://127.0.0.1:1234`.
+2. Load any vision model (e.g. `qwen2.5-vl-7b-instruct`, `qwen3-vl-4b`, or `moondream2`).
+3. Set `VLM_PROVIDER=lmstudio` in `.env`.
+
+### Running with Ollama
+1. Install and start Ollama (`ollama run llava`).
+2. Set `VLM_PROVIDER=ollama` and `OLLAMA_MODEL=llava:latest` in `.env`.
+
+---
+
+## ⚡ Anomaly State Machine & Triage Lifecycle
+
+To prevent false alarms from skewing exam integrity records, ARGUS implements a 6-stage Anomaly State Machine:
+
+```
+                  ┌──────────────────────┐
+                  │     PRELIMINARY      │ (Initial CV geometric trigger)
+                  └──────────┬───────────┘
+                             │
+            ┌────────────────┴────────────────┐
+            ▼                                 ▼
+   ┌──────────────────┐             ┌──────────────────┐
+   │   AI_CONFIRMED   │             │    AI_CLEARED    │ (Auto-suppressed)
+   └────────┬─────────┘             └──────────────────┘
+            │
+            ▼
+   ┌──────────────────┐
+   │   NEEDS_REVIEW   │ (Flagged for human proctor attention)
+   └────────┬─────────┘
+            │
+            ▼
+   ┌──────────────────┐
+   │  HUMAN_RESOLVED  │ (Proctor sign-off via PATCH /api/events/{id}/status)
+   └──────────────────┘
+```
+
+- **Live Triage Badges**: Colored UI pills in the `AlertPanel` indicate the lifecycle stage (`Crimson` for Confirmed, `Emerald` for Cleared, `Amber` for Review, `Blue` for Resolved).
+- **Proctor Actions**: Proctors can sign off, dismiss, or mark flags as resolved directly from the live feed.
+
+---
+
+## 📹 Continuous Session Recording & Forensic Re-Analysis
+
+### 1. Continuous Session Recording
+- Enable the **"Record Full Exam Session"** toggle when starting an exam, or set `RECORD_FULL_SESSION=true` in `config.py`.
+- `SessionVideoRecorder` asynchronously streams incoming frames into a thread-safe queue (`capacity=180`), writing them to disk as faststart H.264 MP4 without blocking real-time CV inference.
+- Complete session videos are accessible via `GET /api/exams/{id}/recording`.
+
+### 2. 1-Click Whole-Exam Re-Analysis
+- Auditors can re-scan completed sessions post-hoc via `POST /api/exams/{id}/reanalyze`.
+- The engine processes the full recorded session, applies deep VLM checks, and populates the forensic timeline with timecode-indexed incident markers.
 
 ---
 
@@ -230,7 +414,7 @@ Staff accounts are automatically seeded into the database on first run:
 
 ---
 
-## 🗂️ Project Structure
+## 🗂️ Project Directory Layout
 
 ```
 Real-Time-Exam-Surveillance-System/
@@ -254,16 +438,18 @@ Real-Time-Exam-Surveillance-System/
 │   │       ├── report_generator.py   # ReportLab PDF dossier compiler
 │   │       ├── audio_level.py        # Real-time microphone dB level monitor (100ms window)
 │   │       └── auth.py               # JWT authentication & RBAC guards
+│   ├── tests/
+│   │   └── test_planned_upgrades.py # Pytest suite for architecture & upgrades
 │   ├── rerun_analysis.py            # Offline VLM re-analysis utility
 │   ├── launch.bat                   # Backend isolated launcher
 │   └── Dockerfile                   # Backend container definition
 ├── frontend/
 │   ├── public/
-│   │   ├── index.html               # Google Fonts, Tailwind config & Obsidian theme
+│   │   ├── index.html               # Google Fonts, Tailwind config & Apple HIG theme
 │   │   └── mockup.html              # Reference UI mockup
 │   ├── src/
 │   │   ├── App.js                   # Main dashboard shell, nav & WebSocket
-│   │   ├── index.css                # Obsidian design tokens, glass panels & scrollbars
+│   │   ├── index.css                # Apple Human Interface tokens, squircle cards & dark mode
 │   │   ├── context/
 │   │   │   └── AuthContext.js       # Authentication state & role checks
 │   │   ├── services/
@@ -290,11 +476,15 @@ Real-Time-Exam-Surveillance-System/
 ├── requirements.txt                 # Backend Python package requirements
 ├── pyproject.toml / uv.lock         # Project dependencies & modern package lock
 ├── start_project.bat                # 1-click launcher (Backend + Frontend + Browser)
+├── run_backend.bat                  # Dedicated backend launcher
+├── run_frontend.bat                 # Dedicated frontend launcher
 ├── stop_project.bat                 # 1-click service shutdown
 ├── run_all.bat                      # Unified test & launch script
 ├── test_surveillance_system.py      # Full test runner & benchmark suite
-├── SYSTEM_OVERVIEW.md               # Detailed system architecture document
+├── CHAPTER_2_DIAGRAMS.md            # Formal report methodology diagrams
+├── MASTER_PROCTORING_ARCHITECTURE.md# Comprehensive proctoring architecture specification
 ├── Planned.md                       # Upgrade specifications & testing matrix
+├── SYSTEM_OVERVIEW.md               # Detailed system architecture document
 ├── TODO.md                          # Production scaling roadmap & guides
 ├── .env.example                     # Environment configuration template
 ├── .gitignore                       # Production gitignore rules
@@ -303,24 +493,12 @@ Real-Time-Exam-Surveillance-System/
 
 ---
 
-## 🗺️ Production Scaling Roadmap
+## 🧪 Testing & Quality Verification
 
-For engineering teams looking to scale ARGUS from single-room testing to high-concurrency campus deployment, see the complete technical blueprint and implementation guides in **[TODO.md](TODO.md)**:
-
-- **Phase 1**: High-Concurrency PostgreSQL Pool & Alembic Database Migrations
-- **Phase 2**: Decoupled AI Inference Worker Pool (Celery + Redis / Ray Serve GPU workers)
-- **Phase 3**: Ultra-Low-Latency WebRTC Streaming Cluster (LiveKit / MediaSoup SFU)
-- **Phase 4**: Acoustic Intelligence (Whisper AI Real-Time Speech Transcription & VAD)
-- **Phase 5**: Cloud-Native Kubernetes & Elastic Autoscaling (Helm + KEDA GPU autoscaling)
-
----
-
-## 🧪 Testing & Verification
-
-Run the comprehensive end-to-end integration and benchmark test suite:
+Execute the comprehensive test suites:
 
 ```bash
-# 1. Run unit test suite covering all architecture upgrades (Phases 1, 3, 4, 5, 6 & Session Recording)
+# 1. Run unit test suite covering all architecture upgrades (State Machine, VLM, Buffer, Recorder)
 python -m pytest backend/tests/test_planned_upgrades.py -v
 
 # 2. Run system integration test suite
@@ -329,6 +507,18 @@ python test_surveillance_system.py --url http://127.0.0.1:8000
 # 3. Verify clean production frontend build
 cd frontend && npm run build
 ```
+
+---
+
+## 🗺️ Production Scaling Roadmap
+
+For engineering teams looking to scale ARGUS from single-room testing to high-concurrency campus deployments, refer to the complete technical blueprint and implementation guides in **[TODO.md](TODO.md)**:
+
+- **Phase 1**: High-Concurrency PostgreSQL Pool & Alembic Database Migrations
+- **Phase 2**: Decoupled AI Inference Worker Pool (Celery + Redis / Ray Serve GPU workers)
+- **Phase 3**: Ultra-Low-Latency WebRTC Streaming Cluster (LiveKit / MediaSoup SFU)
+- **Phase 4**: Acoustic Intelligence (Whisper AI Real-Time Speech Transcription & VAD)
+- **Phase 5**: Cloud-Native Kubernetes & Elastic Autoscaling (Helm + KEDA GPU autoscaling)
 
 ---
 

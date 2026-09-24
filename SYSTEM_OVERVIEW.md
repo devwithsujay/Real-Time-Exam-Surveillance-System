@@ -47,8 +47,8 @@ Real-Time-Exam-Surveillance-System/
 │   │   └── mockup.html              (Static HTML prototype reference)
 │   ├── src/
 │   │   ├── index.js                 (10 lines)    — React DOM root entry point
-│   │   ├── App.js                   (520 lines)   — Root component, Obsidian layout, navigation, WebSocket sync
-│   │   ├── index.css                (650 lines)   — Obsidian design tokens, glass panels, tactical scrollbars
+│   │   ├── App.js                   (520 lines)   — Root component, Apple HIG layout, navigation, WebSocket sync
+│   │   ├── index.css                (650 lines)   — Apple HIG design tokens, squircle cards, dark mode support
 │   │   ├── setupProxy.js            (11 lines)    — CRA dev proxy routing /api and /ws to port 8000
 │   │   ├── context/
 │   │   │   └── AuthContext.js       (85 lines)    — Global auth state, JWT token storage, user roles
