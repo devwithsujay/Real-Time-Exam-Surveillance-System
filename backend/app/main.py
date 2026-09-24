@@ -1105,6 +1105,9 @@ async def get_exam_events(
         status=status_list
     )
 
+    # Automatically sweep and verify any unresolved PRELIMINARY events for this exam
+    asyncio.create_task(sweep_pending_preliminary_events(str(exam_id)))
+
     return {
         "total": total,
         "page": page,
@@ -1850,6 +1853,30 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
     unclear, blurry, obstructed, or the VLM cannot determine what is happening.
     """
     if not screenshot_path or not os.path.isfile(screenshot_path):
+        new_status = AnomalyStatus.NEEDS_REVIEW
+        reasoning = "Needs Human Review: No keyframe image recorded — visual AI inspection unavailable."
+        db = next(get_db())
+        try:
+            ev = get_event(db, event_id)
+            if ev and (ev.status == AnomalyStatus.PRELIMINARY or getattr(ev.status, 'value', None) == "PRELIMINARY"):
+                ev.status = new_status
+                data = {}
+                try:
+                    if ev.analysis_data:
+                        data = json.loads(ev.analysis_data) if isinstance(ev.analysis_data, str) else dict(ev.analysis_data)
+                except Exception:
+                    data = {}
+                data["vlm_reasoning"] = reasoning
+                data["vlm_confidence"] = 0.0
+                data["vlm_status"] = new_status.value
+                data["vlm_verified_at"] = datetime.now(timezone.utc).isoformat()
+                ev.analysis_data = json.dumps(data)
+                db.commit()
+                db.refresh(ev)
+                await broadcast_event(exam_id, ev)
+                logger.info(f"Auto-resolved preliminary event {event_id} to NEEDS_REVIEW (missing screenshot)")
+        finally:
+            db.close()
         return
 
     # Step 1: Automated Computer Vision physical clarity check
@@ -1966,11 +1993,37 @@ async def _log_and_broadcast(exam_id: str, event_data, frame, overlays):
         if event:
             await broadcast_event(exam_id, event)
             # Trigger asynchronous automated VLM verification
-            if event.evidence_screenshot_path:
-                ev_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
-                asyncio.create_task(_auto_vlm_verify_event(exam_id, str(event.event_id), event.evidence_screenshot_path, ev_type_str, event.description))
+            ev_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+            asyncio.create_task(_auto_vlm_verify_event(exam_id, str(event.event_id), event.evidence_screenshot_path, ev_type_str, event.description))
     except Exception as e:
         logger.error(f"Event log/broadcast error: {e}")
+
+
+async def sweep_pending_preliminary_events(exam_id: Optional[str] = None):
+    """
+    Background task that sweeps existing events in PRELIMINARY status
+    and automatically routes them to AI_CONFIRMED, AI_CLEARED, or NEEDS_REVIEW.
+    Ensures no card is ever left indefinitely in 'Verifying with AI...'.
+    """
+    db = next(get_db())
+    try:
+        query = db.query(Event).filter(Event.status == AnomalyStatus.PRELIMINARY)
+        if exam_id:
+            query = query.filter(Event.exam_id == str(exam_id))
+        pending_events = query.limit(25).all()
+        for ev in pending_events:
+            ev_type_str = ev.event_type.value if hasattr(ev.event_type, 'value') else str(ev.event_type)
+            asyncio.create_task(_auto_vlm_verify_event(
+                str(ev.exam_id),
+                str(ev.event_id),
+                ev.evidence_screenshot_path,
+                ev_type_str,
+                ev.description or ""
+            ))
+    except Exception as err:
+        logger.warning(f"Error sweeping preliminary events: {err}")
+    finally:
+        db.close()
 
 
 def _serialize_tracks(tracks) -> List[Dict]:
