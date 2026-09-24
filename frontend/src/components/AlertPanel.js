@@ -3,7 +3,7 @@ import {
   AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Clock,
   Camera, User, Cpu, Sparkles, Filter, CheckCircle2, ShieldAlert,
   Eye, Download, Video, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Loader2, Check, RotateCcw
+  Loader2, Check
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -16,6 +16,7 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [statusOverrides, setStatusOverrides] = useState({});
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const [reanalyzingId, setReanalyzingId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
   // Reset page to 1 when filters change
@@ -95,6 +96,23 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
       setActionError(`Failed to update: ${err.message || 'Server error'}`);
     } finally {
       setUpdatingStatusId(null);
+    }
+  };
+
+  const handleRerunAI = async (eventId) => {
+    if (!eventId) return;
+    setReanalyzingId(eventId);
+    setActionError(null);
+    try {
+      const updated = await api.events.rerunAnalysis(eventId);
+      if (updated && updated.status) {
+        setStatusOverrides(prev => ({ ...prev, [eventId]: updated.status }));
+      }
+    } catch (err) {
+      console.error('Failed to rerun AI analysis:', err);
+      setActionError(`AI analysis failed: ${err.message || 'Server error'}`);
+    } finally {
+      setReanalyzingId(null);
     }
   };
 
@@ -508,11 +526,35 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
                                 </span>
                               )}
                             </div>
-                            {actionError && updatingStatusId === null && (
+                            {actionError && updatingStatusId === null && reanalyzingId === null && (
                               <div className="p-2 text-[11px] text-[#ff3b30] bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-xl">
                                 {actionError}
                               </div>
                             )}
+
+                            {/* On-Demand AI Verification Button (Tier 2 VLM) */}
+                            <button
+                              type="button"
+                              disabled={reanalyzingId === alert.event_id || updatingStatusId === alert.event_id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRerunAI(alert.event_id);
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] dark:text-[#0a84ff] border border-[#0071e3]/25 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                              title="Ask the local VLM to inspect this keyframe freshly"
+                            >
+                              {reanalyzingId === alert.event_id ? (
+                                <>
+                                  <Loader2 size={12} className="animate-spin text-[#0071e3]" />
+                                  <span>AI Re-evaluating with VLM...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={12} className="text-[#0071e3]" />
+                                  <span>Trigger AI Verification (VLM)</span>
+                                </>
+                              )}
+                            </button>
                             {(() => {
                               const effStatus = statusOverrides[alert.event_id] || alert.status || 'PRELIMINARY';
                               if (effStatus === 'HUMAN_RESOLVED') {

@@ -111,7 +111,25 @@ function SurveillanceDashboard() {
             } else if (message.type === 'alert') {
               setAlerts(prev => [message.payload, ...prev.slice(0, 99)]);
             } else if (message.type === 'event') {
-              setEvents(prev => [message.payload, ...prev.slice(0, 199)]);
+              const updatedPayload = message.payload;
+              setEvents(prev => {
+                const idx = prev.findIndex(e => e.event_id === updatedPayload.event_id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = { ...next[idx], ...updatedPayload };
+                  return next;
+                }
+                return [updatedPayload, ...prev.slice(0, 199)];
+              });
+              setAlerts(prev => {
+                const idx = prev.findIndex(a => a.event_id === updatedPayload.event_id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = { ...next[idx], ...updatedPayload };
+                  return next;
+                }
+                return prev;
+              });
             } else if (message.type === 'analytics') {
               setAnalytics(prev => ({
                 ...prev,

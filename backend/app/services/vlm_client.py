@@ -22,11 +22,110 @@ class VLMResult:
     talking_detected: bool = False
     earbud_detected: bool = False
     peeking_detected: bool = False
+    plausible: Optional[bool] = None
+    verdict: Optional[str] = None
+    quick_reasoning: Optional[str] = None
+    visibility: Optional[str] = None
     detected_objects: List[str] = field(default_factory=list)
     description: str = ""
     confidence: float = 0.0
     raw_response: str = ""
     inference_time_ms: float = 0.0
+
+
+def build_instant_surety_prompt(candidate_category: str, cv_confidence: float = 0.85, bbox: Optional[dict] = None) -> str:
+    """Tier 1A Support: Instant Surety Check Prompt to fast-clear CV false positives."""
+    bbox_line = ""
+    if bbox:
+        bbox_line = (
+            f"The CV detector flagged a region roughly at normalized coordinates "
+            f"x={bbox.get('x', 0):.2f}, y={bbox.get('y', 0):.2f}, w={bbox.get('w', 0):.2f}, h={bbox.get('h', 0):.2f} — "
+            "pay closest attention there, but consider the full frame.\n"
+        )
+    return (
+        "You are a fast automatic verification pass on a computer-vision (YOLOv8/MediaPipe) detection "
+        "from a live exam surveillance feed. The CV detector is fast but geometry-based and prone to "
+        "specific false positives (e.g. mistaking a pen/ruler for a phone, or ear-touching for an earbud). "
+        "Your job is a QUICK confirm/deny check, not a full forensic review.\n"
+        "\n"
+        f"CV candidate category: {candidate_category}\n"
+        f"CV confidence: {cv_confidence:.2f}\n"
+        f"{bbox_line}"
+        "\n"
+        "Quick rule check:\n"
+        "- Pens/pencils/erasers/rulers/calculators are NOT phones.\n"
+        "- Touching/scratching the ear, adjusting glasses/mask/headwear, or hearing aids/cochlear implants are NOT earbuds.\n"
+        "- Looking at own paper, writing, or brief incidental glances are NOT peeking.\n"
+        "- If genuinely unclear from this single frame, say so — do not guess.\n"
+        "\n"
+        "Return ONLY a raw JSON object:\n"
+        "{\n"
+        '  "phone_detected": boolean,\n'
+        '  "cheating_detected": boolean,\n'
+        '  "talking_detected": boolean,\n'
+        '  "earbud_detected": boolean,\n'
+        '  "peeking_detected": boolean,\n'
+        '  "plausible": boolean,\n'
+        '  "confidence": float between 0.0 and 1.0,\n'
+        '  "visibility": "clear" | "partial" | "obstructed",\n'
+        '  "quick_reasoning": "1 short sentence justifying verdict"\n'
+        "}"
+    )
+
+
+def build_forensic_reanalysis_prompt(event_type: str, description: str) -> str:
+    """Tier 2: Single-Frame Forensic Re-Analysis Prompt."""
+    return (
+        "You are an independent AI forensic reviewer conducting a SECOND-OPINION verification of a previously "
+        "flagged exam anomaly. Your job is to look at this image freshly and form your own conclusion — you "
+        "are checking the original detection's work, not confirming it.\n"
+        "\n"
+        "STEP 1 — Independent observation:\n"
+        "Describe exactly what you see regarding the candidate's hands, desk surface, lap, ears, and gaze "
+        "direction. Note object shapes, positions, and any ambiguity.\n"
+        "\n"
+        "STEP 2 — Prior detection to verify (reference only, not ground truth):\n"
+        f"- Flagged category: {event_type}\n"
+        f"- Original system description: {description}\n"
+        "\n"
+        "STEP 3 — Apply standing rules:\n"
+        "- Holding a pen, pencil, eraser, ruler, or calculator is NOT a phone.\n"
+        "- Looking down at own paper is NOT peeking.\n"
+        "- Touching hair/face, resting chin on hand is NOT a hidden earbud.\n"
+        "\n"
+        "Return ONLY a raw JSON object:\n"
+        "{\n"
+        '  "phone_detected": boolean,\n'
+        '  "cheating_detected": boolean,\n'
+        '  "talking_detected": boolean,\n'
+        '  "earbud_detected": boolean,\n'
+        '  "peeking_detected": boolean,\n'
+        '  "verdict": "CONFIRMED_VIOLATION" | "FALSE_POSITIVE" | "INCONCLUSIVE",\n'
+        '  "confidence": float between 0.0 and 1.0,\n'
+        '  "forensic_reasoning": "detailed breakdown",\n'
+        '  "detected_objects": ["pen", "paper", ...]\n'
+        "}"
+    )
+
+
+def build_custom_query_prompt(custom_question: str) -> str:
+    """Interactive Custom Proctor Query Prompt."""
+    return (
+        "You are an independent AI forensic reviewer. An invigilator has asked a specific question about "
+        "this exam surveillance snapshot:\n"
+        f"Question: {custom_question}\n"
+        "\n"
+        "Answer only based on what is visibly verifiable in the image. Writing/reading own paper is normal; "
+        "pens/rulers/calculators are not phones; occluded views should be reported as such.\n"
+        "\n"
+        "Return ONLY a raw JSON object:\n"
+        "{\n"
+        '  "answer": "direct, concise answer to the question",\n'
+        '  "confidence": float between 0.0 and 1.0,\n'
+        '  "supporting_observation": "what in the image supports this answer",\n'
+        '  "visibility": "clear" | "partial" | "obstructed"\n'
+        "}"
+    )
 
 
 class LMStudioVLM:
@@ -242,18 +341,19 @@ class LMStudioVLM:
     async def analyze_frame(
         self,
         frame_b64: str,
+        prompt: Optional[str] = None
     ) -> VLMResult:
         if not await self.is_available() or self._client is None:
             return VLMResult()
         client = self._client
-        prompt = self.PROMPT_TEMPLATE
+        active_prompt = prompt or self.PROMPT_TEMPLATE
 
         try:
             t0 = time.time()
             if self.provider == "ollama":
-                text = await self._query_ollama(client, frame_b64, prompt)
+                text = await self._query_ollama(client, frame_b64, active_prompt)
             else:
-                text = await self._query_lm_studio(client, frame_b64, prompt)
+                text = await self._query_lm_studio(client, frame_b64, active_prompt)
 
             elapsed = (time.time() - t0) * 1000
 
@@ -277,16 +377,42 @@ class LMStudioVLM:
             end = text.rfind('}') + 1
             if start >= 0 and end > start:
                 parsed = json.loads(text[start:end])
+                plausible_val = parsed.get("plausible")
+                verdict_val = parsed.get("verdict")
+                quick_reas = parsed.get("quick_reasoning") or parsed.get("forensic_reasoning") or parsed.get("answer")
+
+                phone = bool(parsed.get("phone_detected", False))
+                cheating = bool(parsed.get("cheating_detected", False))
+                talking = bool(parsed.get("talking_detected", False))
+                earbud = bool(parsed.get("earbud_detected", False))
+                peeking = bool(parsed.get("peeking_detected", False))
+
+                # Handle verdict / plausible overrides
+                if verdict_val == "FALSE_POSITIVE" or plausible_val is False:
+                    phone = False
+                    cheating = False
+                    talking = False
+                    earbud = False
+                    peeking = False
+                elif verdict_val == "CONFIRMED_VIOLATION":
+                    cheating = True
+
+                conf = float(parsed.get("confidence", 0.8 if (phone or cheating or peeking or earbud or talking or verdict_val == "CONFIRMED_VIOLATION") else 0.0))
+
                 return VLMResult(
-                    phone_detected=bool(parsed.get("phone_detected", False)),
-                    cheating_detected=bool(parsed.get("cheating_detected", False)),
+                    phone_detected=phone,
+                    cheating_detected=cheating,
                     suspicious_text=bool(parsed.get("suspicious_text", False)),
-                    talking_detected=bool(parsed.get("talking_detected", False)),
-                    earbud_detected=bool(parsed.get("earbud_detected", False)),
-                    peeking_detected=bool(parsed.get("peeking_detected", False)),
+                    talking_detected=talking,
+                    earbud_detected=earbud,
+                    peeking_detected=peeking,
+                    plausible=plausible_val,
+                    verdict=verdict_val,
+                    quick_reasoning=str(quick_reas) if quick_reas else None,
+                    visibility=parsed.get("visibility"),
                     detected_objects=parsed.get("detected_objects", []),
-                    description=str(parsed.get("description", "")),
-                    confidence=float(parsed.get("confidence", 0.8 if (parsed.get("phone_detected") or parsed.get("cheating_detected") or parsed.get("peeking_detected")) else 0.0)),
+                    description=str(parsed.get("description", quick_reas or "")),
+                    confidence=conf,
                     raw_response=text,
                     inference_time_ms=elapsed_ms
                 )
@@ -315,7 +441,7 @@ class LMStudioVLM:
             inference_time_ms=elapsed_ms
         )
 
-    async def analyze_image_file(self, file_path: str) -> VLMResult:
+    async def analyze_image_file(self, file_path: str, prompt: Optional[str] = None) -> VLMResult:
         """Analyze an image file asynchronously by encoding to base64."""
         if not os.path.isfile(file_path):
             logger.warning(f"VLM image file not found: {file_path}")
@@ -323,12 +449,12 @@ class LMStudioVLM:
         try:
             with open(file_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode("utf-8")
-            return await self.analyze_frame(b64)
+            return await self.analyze_frame(b64, prompt=prompt)
         except Exception as e:
             logger.warning(f"Failed to read image for VLM: {e}")
             return VLMResult()
 
-    def analyze_image_file_sync(self, file_path: str) -> VLMResult:
+    def analyze_image_file_sync(self, file_path: str, prompt: Optional[str] = None) -> VLMResult:
         """Synchronously analyze an image file (useful for background worker threads)."""
         if not self.enabled or not os.path.isfile(file_path):
             return VLMResult()
@@ -336,7 +462,7 @@ class LMStudioVLM:
             with open(file_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode("utf-8")
 
-            prompt = self.PROMPT_TEMPLATE
+            active_prompt = prompt or self.PROMPT_TEMPLATE
             t0 = time.time()
 
             with httpx.Client(timeout=self.timeout) as client:

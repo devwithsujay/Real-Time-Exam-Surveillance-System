@@ -60,9 +60,10 @@ from app.services.detection_engine import DetectionEngine
 
 from app.services.mediapipe_analyzer import MediaPipeAnalyzer
 from app.services.anomaly_detector import AnomalyDetector, Alert, AlertType, AlertSeverity, MoondreamAnalysis as AnomalyMoondreamAnalysis
-from app.services.event_logger import EventLogger, EventData
-from app.services.vlm_client import LMStudioVLM
-from app.services.report_generator import generate_pdf_report
+from app.services.vlm_client import (
+    LMStudioVLM, get_vlm_client,
+    build_instant_surety_prompt, build_forensic_reanalysis_prompt, build_custom_query_prompt
+)
 from app.services.redis_client import cache_get, cache_set, get_redis, is_available as redis_available, publish
 from app.services.auth import (
     hash_password, verify_password, create_access_token,
@@ -1190,6 +1191,67 @@ async def update_event_status_endpoint(
     )
 
 
+@app.post("/api/events/{event_id}/rerun-analysis", response_model=EventResponse)
+async def rerun_event_analysis_endpoint(
+    event_id: str,
+    custom_prompt: Optional[str] = Body(None, embed=True),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    On-demand single-event VLM forensic re-run (Tier 2 / Proctor Trigger).
+    Invokes VLM to re-inspect the event keyframe screenshot and updates the status.
+    """
+    event = get_event(db, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not event.evidence_screenshot_path or not os.path.isfile(event.evidence_screenshot_path):
+        raise HTTPException(status_code=400, detail="Event evidence screenshot not available on disk")
+
+    vlm = get_vlm_client()
+    if not vlm.enabled:
+        raise HTTPException(status_code=503, detail="VLM reasoning is disabled in system configuration")
+
+    if custom_prompt:
+        prompt = build_custom_query_prompt(custom_prompt)
+    else:
+        prompt = build_forensic_reanalysis_prompt(
+            event_type=getattr(event.event_type, 'value', str(event.event_type)),
+            description=event.description or ""
+        )
+
+    vlm_res = await vlm.analyze_image_file(event.evidence_screenshot_path, prompt=prompt)
+
+    if vlm_res.verdict == "CONFIRMED_VIOLATION" or vlm_res.phone_detected or vlm_res.cheating_detected or vlm_res.peeking_detected or vlm_res.earbud_detected:
+        new_status = AnomalyStatus.AI_CONFIRMED
+    elif vlm_res.verdict == "FALSE_POSITIVE" or vlm_res.plausible is False:
+        new_status = AnomalyStatus.AI_CLEARED
+    else:
+        new_status = AnomalyStatus.NEEDS_REVIEW
+
+    event.status = new_status
+    data = {}
+    try:
+        if event.analysis_data:
+            data = json.loads(event.analysis_data) if isinstance(event.analysis_data, str) else dict(event.analysis_data)
+    except Exception:
+        data = {}
+
+    data["vlm_reasoning"] = vlm_res.description or vlm_res.quick_reasoning or "Forensic re-analysis completed."
+    data["vlm_confidence"] = vlm_res.confidence
+    data["vlm_status"] = new_status.value
+    data["vlm_reanalyzed_by"] = current_user.username if current_user else "proctor"
+    data["vlm_reanalyzed_at"] = datetime.now(timezone.utc).isoformat()
+    event.analysis_data = json.dumps(data)
+
+    db.commit()
+    db.refresh(event)
+
+    await broadcast_event(str(event.exam_id), event)
+    return event
+
+
 @app.get("/api/events/{event_id}/screenshot")
 async def download_event_screenshot(event_id: str, download: bool = False, db: Session = Depends(get_db)):
     event = get_event(db, event_id)
@@ -1725,6 +1787,84 @@ async def broadcast_event(exam_id: str, event):
     await manager.broadcast(exam_id, message)
 
 
+async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: Optional[str], event_type_val: str, description: Optional[str] = ""):
+    """
+    Automatic background Tier-2 verification pass on preliminary event screenshot.
+    Uses multi-provider VLM (LM Studio / Ollama) to automatically confirm violations (AI_CONFIRMED)
+    or clear false alarms (AI_CLEARED) without requiring human proctor clicks.
+    """
+    if not screenshot_path or not os.path.isfile(screenshot_path):
+        return
+
+    vlm = get_vlm_client()
+    if not vlm.enabled:
+        return
+
+    try:
+        # Build instant surety verification prompt
+        prompt = build_instant_surety_prompt(candidate_category=event_type_val, cv_confidence=0.85)
+        vlm_res = await vlm.analyze_image_file(screenshot_path, prompt=prompt)
+
+        # Fallback to standard check if surety gave no response
+        if not vlm_res.raw_response:
+            vlm_res = await vlm.analyze_image_file(screenshot_path)
+
+        # If VLM is unreachable or offline, keep in preliminary or needs review
+        if not vlm_res.raw_response and vlm_res.inference_time_ms == 0:
+            return
+
+        is_confirmed = (
+            vlm_res.phone_detected or
+            vlm_res.cheating_detected or
+            vlm_res.peeking_detected or
+            vlm_res.earbud_detected or
+            vlm_res.talking_detected or
+            vlm_res.verdict == "CONFIRMED_VIOLATION" or
+            (vlm_res.plausible is True and vlm_res.confidence >= 0.70)
+        )
+        is_cleared = (
+            vlm_res.plausible is False or
+            vlm_res.verdict == "FALSE_POSITIVE" or
+            (not is_confirmed and vlm_res.confidence == 0.0 and vlm_res.raw_response != "")
+        )
+
+        if is_confirmed:
+            new_status = AnomalyStatus.AI_CONFIRMED
+        elif is_cleared:
+            new_status = AnomalyStatus.AI_CLEARED
+        else:
+            new_status = AnomalyStatus.NEEDS_REVIEW
+
+        db = next(get_db())
+        try:
+            ev = get_event(db, event_id)
+            if ev and ev.status == AnomalyStatus.PRELIMINARY:
+                ev.status = new_status
+                data = {}
+                try:
+                    if ev.analysis_data:
+                        data = json.loads(ev.analysis_data) if isinstance(ev.analysis_data, str) else dict(ev.analysis_data)
+                except Exception:
+                    data = {}
+                data["vlm_reasoning"] = vlm_res.description or vlm_res.quick_reasoning or (
+                    "AI confirmed suspicious indicators in surveillance keyframe." if is_confirmed else "AI cleared false positive: normal candidate behavior observed."
+                )
+                data["vlm_confidence"] = vlm_res.confidence
+                data["vlm_status"] = new_status.value
+                data["vlm_inference_ms"] = vlm_res.inference_time_ms
+                data["vlm_verified_at"] = datetime.now(timezone.utc).isoformat()
+                ev.analysis_data = json.dumps(data)
+                db.commit()
+                db.refresh(ev)
+                await broadcast_event(exam_id, ev)
+                logger.info(f"Auto-VLM verified event {event_id}: {new_status.value} (conf={vlm_res.confidence:.2f})")
+        finally:
+            db.close()
+
+    except Exception as exc:
+        logger.warning(f"Auto-VLM background verification failed for event {event_id}: {exc}")
+
+
 async def _log_and_broadcast(exam_id: str, event_data, frame, overlays):
     if not event_logger:
         return
@@ -1734,6 +1874,10 @@ async def _log_and_broadcast(exam_id: str, event_data, frame, overlays):
         event = await loop.run_in_executor(None, lambda: el.log_event(event_data, frame, overlays=overlays))
         if event:
             await broadcast_event(exam_id, event)
+            # Trigger asynchronous automated VLM verification
+            if event.evidence_screenshot_path:
+                ev_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+                asyncio.create_task(_auto_vlm_verify_event(exam_id, str(event.event_id), event.evidence_screenshot_path, ev_type_str, event.description))
     except Exception as e:
         logger.error(f"Event log/broadcast error: {e}")
 

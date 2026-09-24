@@ -143,6 +143,11 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ status, review_notes: reviewNotes })
       }),
+    rerunAnalysis: (eventId, customPrompt = null) =>
+      request(`/api/events/${eventId}/rerun-analysis`, {
+        method: 'POST',
+        body: JSON.stringify({ custom_prompt: customPrompt })
+      }),
     clipUrl: (eventId) => `${API_BASE}/api/events/${eventId}/clip`,
     screenshotUrl: (eventId) => `${API_BASE}/api/events/${eventId}/screenshot`,
   },

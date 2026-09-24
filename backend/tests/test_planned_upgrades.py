@@ -253,3 +253,30 @@ def test_continuous_session_recording_and_reanalyze(tmp_path):
     finally:
         db.close()
 
+
+def test_automated_vlm_prompts_and_surety():
+    from app.services.vlm_client import (
+        build_instant_surety_prompt, build_forensic_reanalysis_prompt,
+        build_custom_query_prompt, LMStudioVLM
+    )
+
+    p1 = build_instant_surety_prompt("PHONE_DETECTED", cv_confidence=0.9, bbox={"x": 0.2, "y": 0.3, "w": 0.4, "h": 0.5})
+    assert "PHONE_DETECTED" in p1
+    assert "quick_reasoning" in p1
+    assert "plausible" in p1
+
+    p2 = build_forensic_reanalysis_prompt("CHEAT_SHEET", "Student concealing slip")
+    assert "CHEAT_SHEET" in p2
+    assert "CONFIRMED_VIOLATION" in p2
+
+    p3 = build_custom_query_prompt("Is the student looking at a book?")
+    assert "Is the student looking at a book?" in p3
+
+    # Test parser with surety check JSON
+    client = LMStudioVLM()
+    test_json = '{"plausible": false, "confidence": 0.95, "visibility": "clear", "quick_reasoning": "Holding black pen, not a phone."}'
+    parsed = client._parse_response(test_json, 120.0)
+    assert parsed.plausible is False
+    assert parsed.phone_detected is False
+    assert parsed.quick_reasoning == "Holding black pen, not a phone."
+
