@@ -40,21 +40,21 @@ function AnalyticsBoard({ analytics, exam }) {
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col bg-[#f5f5f7] dark:bg-[#000000] overflow-y-auto p-4 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-black/[0.08] dark:border-white/[0.08]">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-black/[0.08] dark:border-white/[0.08]">
         <div>
           <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-[#0071e3]" />
-            <h2 className="text-base font-semibold text-[#1d1d1f] dark:text-white tracking-tight">
+            <Activity className="w-4 h-4 text-[#0071e3] shrink-0" />
+            <h2 className="text-base font-semibold text-[#1d1d1f] dark:text-white tracking-tight whitespace-nowrap">
               Telemetry & Session Analytics
             </h2>
           </div>
-          <p className="text-xs text-[#86868b] mt-0.5">
+          <p className="text-xs text-[#86868b] mt-0.5 leading-relaxed">
             Real-time attention metrics, anomaly distribution curves, and proctoring indices.
           </p>
         </div>
 
         {exam && (
-          <div className="flex items-center gap-2 self-start sm:self-auto px-3 py-1.5 rounded-full bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] text-xs text-[#1d1d1f] dark:text-white shadow-xs">
+          <div className="flex items-center gap-2 self-start lg:self-auto px-3 py-1.5 rounded-full bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.08] text-xs text-[#1d1d1f] dark:text-white shadow-xs shrink-0">
             <span className="text-[#86868b]">Session:</span>
             <span className="font-semibold">{exam.exam_name}</span>
             <span className="text-black/20 dark:text-white/20">•</span>

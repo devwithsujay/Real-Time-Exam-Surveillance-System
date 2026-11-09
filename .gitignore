@@ -100,3 +100,10 @@ temp/
 *.iml
 *.ipr
 *.iws
+
+# Scratch & Local Reports
+backend/scratch/
+backend/scratch_*.jpg
+backend/test_moving_places.py
+reports/
+backend/yolov8n.pt

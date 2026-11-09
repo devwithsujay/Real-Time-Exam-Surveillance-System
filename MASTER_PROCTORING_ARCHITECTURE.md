@@ -44,7 +44,7 @@ Tier 1 is a **hybrid layer with three sub-components**: a continuous CV engine, 
         │
         ├────────────────────────────────┬────────────────────────────────┐
         ▼                                ▼                                │
-┌──────────────────────┐        ┌───────────────────────────┐             │
+┌───────────────────────┐       ┌───────────────────────────┐             │
 │ TIER 1A: CV Detection │       │ TIER 1B: VLM Frame Sweep  │             │
 │ YOLOv8 + MediaPipe    │       │ Adaptive Round-Robin      │             │
 │ every frame, ~20-40ms │       │ (~1 check per 10-15s/desk)│             │

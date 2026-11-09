@@ -55,6 +55,16 @@ class AudioLevelService:
         self._thread.start()
         return True
 
+    @staticmethod
+    def calculate_db(data: np.ndarray) -> float:
+        """Convert a mono audio buffer to normalized relative sound level [0.0, 100.0] dB."""
+        if data is None or len(data) == 0:
+            return 0.0
+        rms = float(np.sqrt(np.mean(data ** 2)))
+        dbfs = 20.0 * np.log10(rms + 1e-10) if rms > 0 else -100.0
+        # Map digital dBFS (-100 dBFS to 0 dBFS) to positive 0-100 sound level
+        return float(np.clip(dbfs + 100.0, 0.0, 100.0))
+
     def _loop(self):
         if sd is None:
             return
@@ -69,10 +79,7 @@ class AudioLevelService:
             ) as stream:
                 while self._running:
                     data, _ = stream.read(blocksize)
-                    rms = float(np.sqrt(np.mean(data ** 2)))
-                    dbfs = 20.0 * np.log10(rms + 1e-10) if rms > 0 else -100.0
-                    # Map digital dBFS (-100 dBFS to 0 dBFS) to positive 0-100 sound level
-                    normalized_db = float(np.clip(dbfs + 100.0, 0.0, 100.0))
+                    normalized_db = self.calculate_db(data)
                     with self._lock:
                         self._level_db = normalized_db
         except Exception:

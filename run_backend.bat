@@ -2,10 +2,10 @@
 title ARGUS Backend (FastAPI :8000)
 cd /d "%~dp0backend"
 set "PYTHONPATH=%~dp0backend;%~dp0"
-if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe" (
-    set "PY_EXE=C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe"
-) else if exist "%~dp0.venv\Scripts\python.exe" (
+if exist "%~dp0.venv\Scripts\python.exe" (
     set "PY_EXE=%~dp0.venv\Scripts\python.exe"
+) else if exist "C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe" (
+    set "PY_EXE=C:\Users\sujay\.gemini\antigravity\playground\GEN AI Project\.venv\Scripts\python.exe"
 ) else (
     set "PY_EXE=python"
 )

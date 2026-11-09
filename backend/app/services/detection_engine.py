@@ -72,12 +72,20 @@ class DetectionEngine:
 
     def track(self, frame: np.ndarray, frame_number: int = 0) -> DetectionResult:
         start_time = time.time()
+        if self.model is None:
+            return DetectionResult(
+                detections=[],
+                inference_time_ms=0.0,
+                frame_number=frame_number,
+                timestamp=time.time()
+            )
         try:
             results = self.model.track(
                 frame,
                 conf=self.confidence_threshold,
                 iou=self.nms_threshold,
                 classes=self.target_classes,
+                imgsz=640,
                 verbose=False,
                 device=self.device,
                 persist=True,
@@ -114,6 +122,13 @@ class DetectionEngine:
             DetectionResult with person detections
         """
         start_time = time.time()
+        if self.model is None:
+            return DetectionResult(
+                detections=[],
+                inference_time_ms=0.0,
+                frame_number=frame_number,
+                timestamp=time.time()
+            )
 
         try:
             # Run inference
@@ -122,6 +137,7 @@ class DetectionEngine:
                 conf=self.confidence_threshold,
                 iou=self.nms_threshold,
                 classes=self.target_classes,
+                imgsz=640,
                 verbose=False,
                 device=self.device
             )
@@ -211,7 +227,7 @@ class DetectionEngine:
 
     def detect_batch(self, frames: List[np.ndarray]) -> List[DetectionResult]:
         """Run detection on multiple frames (batch inference)."""
-        if not frames:
+        if not frames or self.model is None:
             return []
 
         start_time = time.time()

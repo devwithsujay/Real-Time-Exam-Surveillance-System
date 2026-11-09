@@ -495,16 +495,49 @@ Real-Time-Exam-Surveillance-System/
 
 ## 🧪 Testing & Quality Verification
 
-Execute the comprehensive test suites:
+ARGUS includes an empirical 16-test academic verification suite spanning **Functional Accuracy**, **System Performance**, and **Robustness & Security**:
+
+### 1. Automated Empirical Verification Suite (v2.0)
+Execute all 16 forensic benchmark test cases directly from the project root:
 
 ```bash
-# 1. Run unit test suite covering all architecture upgrades (State Machine, VLM, Buffer, Recorder)
+# Run full empirical verification suite (10-minute soak test, 100-frame pipeline benchmarks)
+python run_tests.py
+
+# Run quick verification mode (2-minute soak test, condensed benchmarks for development restarts)
+python run_tests.py --quick
+
+# Or execute via the backend module
+python -m backend.startup_tests --quick --output ./reports
+```
+
+### 2. Multi-Format Audit Reports
+Every test run automatically measures empirical numbers on your hardware and compiles:
+- **Interactive HTML Dashboard**: `reports/latest_test_report.html` (Glassmorphism UI with claims verification, latency breakdowns, and system telemetry)
+- **Academic Markdown Dossier**: `reports/LATEST_TEST_REPORT.md` (BibTeX citation, empirical metrics table, and known limitations)
+- **Structured JSON Telemetry**: `reports/quick_advanced_report_<timestamp>.json`
+- **Headline CSV Metrics**: `reports/latest_headline_metrics.csv`
+
+### 3. Automated Server Startup Execution
+By default, whenever the FastAPI server starts, the test suite executes in a non-blocking background daemon thread (configured in `.env`):
+```ini
+RUN_STARTUP_TESTS=True           # Enable/disable background verification on boot
+STARTUP_TESTS_QUICK=False        # Toggle between 10-minute full soak and 2-minute quick mode
+STARTUP_TESTS_DELAY_SECONDS=3.0  # Warm-up delay before runner executes
+```
+
+### 4. Ground-Truth Data & Accuracy Testing
+Tests requiring ground-truth annotations (TC-CORE-01, TC-CORE-02, TC-TRK-01, TC-ANOM-01) expect annotated data in `data/labeled_samples/`. If unannotated, they are transparently marked `SKIPPED: no labeled data` to preserve academic honesty and never invent synthetic ground-truth.
+
+### 5. Existing Integration & Unit Suites
+```bash
+# Run unit test suite covering architecture upgrades (State Machine, VLM, Buffer, Recorder)
 python -m pytest backend/tests/test_planned_upgrades.py -v
 
-# 2. Run system integration test suite
+# Run live endpoint integration test suite against running server
 python test_surveillance_system.py --url http://127.0.0.1:8000
 
-# 3. Verify clean production frontend build
+# Verify clean production frontend build
 cd frontend && npm run build
 ```
 

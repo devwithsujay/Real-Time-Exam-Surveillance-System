@@ -4,7 +4,7 @@ import json
 import uuid
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, case
 
 from app.models import (
     Exam, Participant, Event, ExamStatus, ParticipantStatus, EventType, EventSeverity,
@@ -28,6 +28,21 @@ def get_exams(db: Session, skip: int = 0, limit: int = 100) -> List[Exam]:
     return db.query(Exam).order_by(desc(Exam.created_at)).offset(skip).limit(limit).all()
 
 
+def _serialize_settings(settings_val: Any) -> Optional[str]:
+    if settings_val is None:
+        return None
+    if isinstance(settings_val, str):
+        return settings_val
+    if hasattr(settings_val, "model_dump_json"):
+        return str(settings_val.model_dump_json())
+    if hasattr(settings_val, "model_dump"):
+        return json.dumps(settings_val.model_dump())
+    try:
+        return json.dumps(settings_val)
+    except Exception:
+        return str(settings_val)
+
+
 def create_exam(db: Session, exam: ExamCreate) -> Exam:
     start_time = exam.start_time or utcnow()
     end_time = exam.end_time or (start_time + timedelta(minutes=exam.duration_minutes))
@@ -39,7 +54,7 @@ def create_exam(db: Session, exam: ExamCreate) -> Exam:
         location=exam.location,
         num_students=exam.num_students,
         num_cameras=exam.num_cameras,
-        settings=exam.settings.model_dump_json() if exam.settings else None,
+        settings=_serialize_settings(exam.settings),
         status=ExamStatus.CREATED
     )
     db.add(db_exam)
@@ -54,8 +69,8 @@ def update_exam(db: Session, exam_id, exam_update: ExamUpdate) -> Optional[Exam]
         return None
 
     update_data = exam_update.model_dump(exclude_unset=True)
-    if 'settings' in update_data and update_data['settings']:
-        update_data['settings'] = update_data['settings'].model_dump_json()
+    if 'settings' in update_data:
+        update_data['settings'] = _serialize_settings(update_data['settings'])
 
     for field, value in update_data.items():
         setattr(db_exam, field, value)
@@ -409,80 +424,64 @@ def update_event_status(
 
 
 def get_exam_analytics(db: Session, exam_id) -> Dict[str, Any]:
-    """Get computed analytics for an exam."""
+    """Get computed analytics for an exam with optimized batch queries."""
     exam_id = str(exam_id)
-    ensure_exam_participants_seeded(db, exam_id)
     db_exam = get_exam(db, exam_id)
 
-    # Summary stats
-    enrolled_count = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id
-    ).scalar() or 0
+    # 1. Consolidated participant statistics (counts by status and risk in one query)
+    p_stats = db.query(
+        func.count(Participant.participant_id).label("enrolled"),
+        func.count(case((Participant.status == ParticipantStatus.CHECKED_IN, 1))).label("checked_in"),
+        func.count(case((Participant.current_track_id != None, 1))).label("active_tracks"),
+        func.count(case((Participant.risk_score <= 30, 1))).label("risk_low"),
+        func.count(case(((Participant.risk_score > 30) & (Participant.risk_score <= 70), 1))).label("risk_medium"),
+        func.count(case((Participant.risk_score > 70, 1))).label("flagged")
+    ).filter(Participant.exam_id == exam_id).first()
+
+    enrolled_count = p_stats[0] if p_stats else 0
+    checked_in = p_stats[1] if p_stats else 0
+    active_tracks = p_stats[2] if p_stats else 0
+    risk_low = p_stats[3] if p_stats else 0
+    risk_medium = p_stats[4] if p_stats else 0
+    flagged = p_stats[5] if p_stats else 0
+
     total_students = max(enrolled_count, db_exam.num_students if db_exam else 0)
-
-    checked_in = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id,
-        Participant.status == ParticipantStatus.CHECKED_IN
-    ).scalar() or 0
-
-    active_tracks = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id,
-        Participant.current_track_id != None
-    ).scalar() or 0
-
     if checked_in > total_students:
         total_students = checked_in
     if active_tracks == 0 and checked_in > 0:
         active_tracks = checked_in
 
-    total_events = db.query(func.count(Event.event_id)).filter(Event.exam_id == exam_id).scalar()
-    high_severity = db.query(func.count(Event.event_id)).filter(
-        Event.exam_id == exam_id, Event.severity == EventSeverity.HIGH
-    ).scalar()
-    medium_severity = db.query(func.count(Event.event_id)).filter(
-        Event.exam_id == exam_id, Event.severity == EventSeverity.MEDIUM
-    ).scalar()
-    low_severity = db.query(func.count(Event.event_id)).filter(
-        Event.exam_id == exam_id, Event.severity == EventSeverity.LOW
-    ).scalar()
+    # 2. Consolidated event severity counts in one query
+    sev_rows = db.query(
+        Event.severity,
+        func.count(Event.event_id)
+    ).filter(Event.exam_id == exam_id).group_by(Event.severity).all()
 
-    # Top violations
+    sev_map = {row[0]: row[1] for row in sev_rows}
+    high_severity = sev_map.get(EventSeverity.HIGH, 0)
+    medium_severity = sev_map.get(EventSeverity.MEDIUM, 0)
+    low_severity = sev_map.get(EventSeverity.LOW, 0)
+    total_events = sum(sev_map.values())
+
+    # 3. Top violations in one query
     violation_stats = db.query(
         Event.event_type,
         func.count(Event.event_id).label('count')
     ).filter(Event.exam_id == exam_id).group_by(Event.event_type).all()
 
     top_violations = [
-        {"type": vt.value, "count": count, "percentage": round(count/total_events*100, 1) if total_events > 0 else 0}
+        {"type": vt.value if hasattr(vt, 'value') else str(vt), "count": count, "percentage": round(count/total_events*100, 1) if total_events > 0 else 0}
         for vt, count in violation_stats
     ]
 
-    # Flagged students (high risk)
-    flagged = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id,
-        Participant.risk_score > 70
-    ).scalar() or 0
-
-    # Risk distribution
-    risk_low = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id,
-        Participant.risk_score <= 30
-    ).scalar() or 0
-    risk_medium = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id,
-        Participant.risk_score > 30,
-        Participant.risk_score <= 70
-    ).scalar() or 0
-
-    # Engagement distribution (based on events per participant)
+    # 4. Engagement distribution (events per participant) in one query
     participant_event_counts = db.query(
-        Event.participant_id,
         func.count(Event.event_id).label('event_count')
     ).filter(Event.exam_id == exam_id).group_by(Event.participant_id).all()
 
-    engagement_high = sum(1 for _, count in participant_event_counts if count <= 3)
-    engagement_medium = sum(1 for _, count in participant_event_counts if 4 <= count <= 10)
-    engagement_low = sum(1 for _, count in participant_event_counts if count > 10)
+    engagement_high = sum(1 for (count,) in participant_event_counts if count <= 3)
+    engagement_medium = sum(1 for (count,) in participant_event_counts if 4 <= count <= 10)
+    engagement_low = sum(1 for (count,) in participant_event_counts if count > 10)
 
     return {
         "total_students": total_students or 0,

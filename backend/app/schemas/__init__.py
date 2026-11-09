@@ -396,3 +396,37 @@ class VideoAuditListItemResponse(BaseModel):
 
 class VideoAuditDetailResponse(VideoAuditListItemResponse):
     incidents: List[VideoAuditIncidentResponse] = []
+
+
+# Camera Management Schemas
+class CameraInfo(BaseModel):
+    source: str
+    index: int
+    name: str
+    max_resolution: str
+    is_1080p: bool = False
+    is_active: bool = False
+    working: bool = True
+
+
+class CameraListResponse(BaseModel):
+    active_source: str
+    active_resolution: str
+    active_fps: int
+    is_1080p: bool
+    status: str
+    cameras: List[CameraInfo]
+
+
+class CameraSwitchRequest(BaseModel):
+    camera_source: str
+    resolution: Optional[str] = "1920x1080"
+    fps: Optional[int] = 30
+    exam_id: Optional[str] = None
+
+
+class ExamCameraAssignRequest(BaseModel):
+    camera_source: str
+    camera_name: Optional[str] = None
+    resolution: Optional[str] = "1920x1080"
+

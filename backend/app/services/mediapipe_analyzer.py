@@ -1,8 +1,13 @@
+import os
+# Suppress Google MediaPipe internal telemetry (clearcut uploader) and glog noise
+os.environ["GLOG_minloglevel"] = "3"
+os.environ["MEDIAPIPE_DISABLE_TELEMETRY"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import cv2
 import numpy as np
 import time
 import logging
-import os
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 

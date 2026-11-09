@@ -1,4 +1,5 @@
 import os
+import asyncio
 import time
 import json
 import base64
@@ -22,6 +23,7 @@ class VLMResult:
     talking_detected: bool = False
     earbud_detected: bool = False
     peeking_detected: bool = False
+    seat_violation_detected: bool = False
     plausible: Optional[bool] = None
     verdict: Optional[str] = None
     quick_reasoning: Optional[str] = None
@@ -29,120 +31,43 @@ class VLMResult:
     detected_objects: List[str] = field(default_factory=list)
     description: str = ""
     confidence: float = 0.0
+    violating_seats: List[str] = field(default_factory=list)
     raw_response: str = ""
     inference_time_ms: float = 0.0
 
 
-def build_instant_surety_prompt(candidate_category: str, cv_confidence: float = 0.85, bbox: Optional[dict] = None) -> str:
-    """Tier 1A Support: Instant Surety Check Prompt to fast-clear CV false positives."""
-    bbox_line = ""
-    if bbox:
-        bbox_line = (
-            f"The CV detector flagged a region roughly at normalized coordinates "
-            f"x={bbox.get('x', 0):.2f}, y={bbox.get('y', 0):.2f}, w={bbox.get('w', 0):.2f}, h={bbox.get('h', 0):.2f} — "
-            "pay closest attention there, but consider the full frame.\n"
-        )
+def build_unified_prompt(
+    candidate_category: Optional[str] = None,
+    description: Optional[str] = None,
+    custom_question: Optional[str] = None
+) -> str:
+    """
+    Standard Single Prompt for Live Exam Surveillance & On-Demand Proctor Verification.
+    Direct, fast, and optimized for local vision models (Qwen-VL, Moondream, LLaVA).
+    """
+    context_section = ""
+    if custom_question:
+        context_section = f"The invigilator has asked a specific question: \"{custom_question}\". Answer accurately based strictly on what is visible.\n\n"
+    elif candidate_category:
+        desc_str = f" ({description})" if description else ""
+        context_section = f"Verification Context: The automated surveillance detector flagged possible [{candidate_category}]{desc_str}. Verify whether this violation is actually visible in the image.\n\n"
+
     return (
-        "You are a fast automatic verification pass on a computer-vision (YOLOv8/MediaPipe) detection "
-        "from a live exam surveillance feed. The CV detector is fast but geometry-based and prone to "
-        "specific false positives (e.g. mistaking a pen/ruler for a phone, or ear-touching for an earbud). "
-        "Your job is a QUICK confirm/deny check, not a full forensic review.\n"
-        "\n"
-        f"CV candidate category: {candidate_category}\n"
-        f"CV confidence: {cv_confidence:.2f}\n"
-        f"{bbox_line}"
-        "\n"
-        "Quick rule check:\n"
-        "- Pens/pencils/erasers/rulers/calculators are NOT phones.\n"
-        "- Touching/scratching the ear, adjusting glasses/mask/headwear, or hearing aids/cochlear implants are NOT earbuds.\n"
-        "- Looking at own paper, writing, or brief incidental glances are NOT peeking.\n"
-        "- If genuinely unclear from this single frame, say so — do not guess.\n"
-        "\n"
-        "Return ONLY a raw JSON object:\n"
-        "{\n"
-        '  "phone_detected": boolean,\n'
-        '  "cheating_detected": boolean,\n'
-        '  "talking_detected": boolean,\n'
-        '  "earbud_detected": boolean,\n'
-        '  "peeking_detected": boolean,\n'
-        '  "plausible": boolean,\n'
-        '  "confidence": float between 0.0 and 1.0,\n'
-        '  "visibility": "clear" | "partial" | "obstructed",\n'
-        '  "quick_reasoning": "1 short sentence justifying verdict"\n'
-        "}"
-    )
-
-
-def build_forensic_reanalysis_prompt(event_type: str, description: str) -> str:
-    """Tier 2: Single-Frame Forensic Re-Analysis Prompt."""
-    return (
-        "You are an independent AI forensic reviewer conducting a SECOND-OPINION verification of a previously "
-        "flagged exam anomaly. Your job is to look at this image freshly and form your own conclusion — you "
-        "are checking the original detection's work, not confirming it.\n"
-        "\n"
-        "STEP 1 — Independent observation:\n"
-        "Describe exactly what you see regarding the candidate's hands, desk surface, lap, ears, and gaze "
-        "direction. Note object shapes, positions, and any ambiguity.\n"
-        "\n"
-        "STEP 2 — Prior detection to verify (reference only, not ground truth):\n"
-        f"- Flagged category: {event_type}\n"
-        f"- Original system description: {description}\n"
-        "\n"
-        "STEP 3 — Apply standing rules:\n"
-        "- Holding a pen, pencil, eraser, ruler, or calculator is NOT a phone.\n"
-        "- Looking down at own paper is NOT peeking.\n"
-        "- Touching hair/face, resting chin on hand is NOT a hidden earbud.\n"
-        "\n"
-        "Return ONLY a raw JSON object:\n"
-        "{\n"
-        '  "phone_detected": boolean,\n'
-        '  "cheating_detected": boolean,\n'
-        '  "talking_detected": boolean,\n'
-        '  "earbud_detected": boolean,\n'
-        '  "peeking_detected": boolean,\n'
-        '  "verdict": "CONFIRMED_VIOLATION" | "FALSE_POSITIVE" | "INCONCLUSIVE",\n'
-        '  "confidence": float between 0.0 and 1.0,\n'
-        '  "forensic_reasoning": "detailed breakdown",\n'
-        '  "detected_objects": ["pen", "paper", ...]\n'
-        "}"
-    )
-
-
-def build_custom_query_prompt(custom_question: str) -> str:
-    """Interactive Custom Proctor Query Prompt."""
-    return (
-        "You are an independent AI forensic reviewer. An invigilator has asked a specific question about "
-        "this exam surveillance snapshot:\n"
-        f"Question: {custom_question}\n"
-        "\n"
-        "Answer only based on what is visibly verifiable in the image. Writing/reading own paper is normal; "
-        "pens/rulers/calculators are not phones; occluded views should be reported as such.\n"
-        "\n"
-        "Return ONLY a raw JSON object:\n"
-        "{\n"
-        '  "answer": "direct, concise answer to the question",\n'
-        '  "confidence": float between 0.0 and 1.0,\n'
-        '  "supporting_observation": "what in the image supports this answer",\n'
-        '  "visibility": "clear" | "partial" | "obstructed"\n'
-        "}"
-    )
-
-
-class LMStudioVLM:
-    """Vision Language Model client supporting both LM Studio and Ollama (LLaVA / Moondream / Qwen)."""
-
-    PROMPT_TEMPLATE = (
-        "You are an AI exam proctor analyzing a surveillance snapshot of a student at an exam desk.\n"
+        "You are an AI exam proctor analyzing a live surveillance snapshot of a student at an exam desk.\n"
+        f"{context_section}"
         "Inspect the image for these suspicious indicators:\n"
         "1. MOBILE_PHONE: Person holding, using, or looking at a mobile phone or glowing screen.\n"
         "2. UNAUTHORIZED_NOTES: Loose cheat sheets, unauthorized paper slips, or notes concealed under desk/lap.\n"
         "3. WEARABLE_AUDIO: In-ear earbuds, headphones, or bluetooth earpiece visible on either ear.\n"
-        "4. COMMUNICATION: Actively turning and speaking or gesturing to another person.\n"
-        "5. PEEKING_AT_NEIGHBOR: Person turning head or leaning sideways to look at an adjacent candidate's exam desk or paper.\n"
+        "4. SEAT_VIOLATION: Student standing up, leaving chair/desk, vacating seat, or moving places.\n"
+        "5. COMMUNICATION: Actively turning and speaking or gesturing to another person.\n"
+        "6. PEEKING_AT_NEIGHBOR: Person turning head or leaning sideways to look at an adjacent candidate's exam desk or paper.\n"
         "\n"
         "CRITICAL RULES:\n"
-        "- Writing on an exam paper on the desk with a pen/pencil is NORMAL behavior, NOT cheating.\n"
+        "- Writing on an exam paper on the desk with a pen/pencil/eraser is NORMAL behavior, NOT cheating.\n"
         "- Looking down directly at the exam paper on the desk is NORMAL behavior.\n"
+        "- Resting chin on hand, adjusting glasses/mask, or touching ear/hair is NORMAL behavior, NOT an earbud.\n"
+        "- An invigilator, teacher, or proctor standing upright or patrolling classroom aisles or standing near desks is AUTHORIZED personnel, NOT a seat violation or cheating.\n"
         "\n"
         "Return ONLY a raw JSON object matching this schema:\n"
         "{\n"
@@ -151,11 +76,144 @@ class LMStudioVLM:
         '  "talking_detected": boolean,\n'
         '  "earbud_detected": boolean,\n'
         '  "peeking_detected": boolean,\n'
-        '  "detected_objects": ["desk", "paper", "pen", ...],\n'
+        '  "verdict": "CONFIRMED_VIOLATION" | "FALSE_POSITIVE",\n'
+        '  "detected_objects": ["desk", "paper", "pen"],\n'
         '  "description": "1 brief sentence summarizing visible student activity",\n'
         '  "confidence": float between 0.0 and 1.0\n'
         "}"
     )
+
+
+# Compatibility aliases ensuring zero breakages across codebase
+def build_instant_surety_prompt(candidate_category: str = "", cv_confidence: float = 0.85, bbox: Optional[dict] = None) -> str:
+    return build_unified_prompt(candidate_category=candidate_category)
+
+
+def build_forensic_reanalysis_prompt(event_type: str = "", description: str = "") -> str:
+    return build_unified_prompt(candidate_category=event_type, description=description)
+
+
+def build_custom_query_prompt(custom_question: str) -> str:
+    return build_unified_prompt(custom_question=custom_question)
+
+
+def build_multiframe_proctor_prompt(
+    n_frames: int = 1,
+    interval: float = 0.0,
+    camera_angle: str = "desk-level exam surveillance",
+    seat_labels: str = "S1 (candidate), S2 (adjacent neighbor)",
+    exam_rules: str = "closed book; no phones, notes or earphones; calculators not allowed"
+) -> str:
+    """
+    Gold-Standard Proctoring Prompt supporting single snapshot or multi-frame sequences.
+    Detects covert device behavior, directional neighbor peeking, mutual gaze, communication,
+    and unauthorized notes while enforcing strict non-violation exclusions.
+    """
+    if n_frames == 1:
+        return (
+            "You are an AI exam proctor monitoring an exam room.\n"
+            f"Camera view: {camera_angle}. Students visible: {seat_labels}. Exam rules: {exam_rules}.\n\n"
+            "CRITICAL INVIGILATOR / TEACHER EDGE CASE RULE:\n"
+            "- A person who is standing upright, walking along the classroom aisles or walkways, supervising the room, holding papers, or standing near student desks is an AUTHORIZED INVIGILATOR / TEACHER / PROCTOR performing their duties.\n"
+            "- Do NOT flag a standing or patrolling invigilator/teacher as a SEAT_VIOLATION, leaving seat, standing up, or vacating desk.\n"
+            "- Do NOT flag an invigilator standing near or behind a student's desk as 'two students sharing one desk' or 'crowding'. Legitimate invigilator inspection is NOT a violation.\n"
+            "- Do NOT flag brief administrative conversation between invigilator and student (e.g. signing attendance or answering questions) as unauthorized communication.\n"
+            "- ONLY flag a SEAT_VIOLATION if an actual seated EXAMINEE/STUDENT stands up, abandons their desk, moves places, or two examinees crowd onto one desk.\n\n"
+            "Carefully inspect each examinee:\n"
+            "1. SEAT_VIOLATION: Flag ONLY if a seated examinee stands up, leaves their seat, vacates desk, moves places, or two examinees crowd onto one desk.\n"
+            "2. CHIT_PASSING: Check if any student is passing a chit, paper slip, or note, or reaching an arm/hand toward a neighbor or behind a chair.\n"
+            "3. PEEKING: Check if any student is turning their head sideways or leaning across desks toward another student or desk.\n"
+            "4. PHONE: Check for any mobile phone, cheat sheet, unauthorized materials, or earphones held by a student.\n"
+            "5. COMMUNICATION: Check if any students are actively talking or whispering to each other while seated.\n\n"
+            "Decide if any suspicious proctoring violation exists:\n"
+            "- If all candidates are seated writing normally, and any standing/walking person is an invigilator/teacher patrolling the aisles or standing near desks, output:\n"
+            "{\n"
+            '  "violation": false,\n'
+            '  "reason": "Candidates seated writing quietly at assigned desks; invigilator patrolling aisles"\n'
+            "}\n\n"
+            "- If an actual candidate anomaly is observed (examinee standing up, leaving seat, moving places, sharing desk, passing chit, peeking, or holding phone), output:\n"
+            "{\n"
+            '  "violation": true,\n'
+            '  "type": "SEAT_VIOLATION" | "CHIT_PASSING" | "PEEKING" | "PHONE" | "CHEATING" | "COMMUNICATION",\n'
+            '  "seat": "S1" | "S2" | "S3",\n'
+            '  "confidence": 0.85 to 1.0,\n'
+            '  "reason": "factual description of the observed student violation (e.g. Student S1 stood up and moved from their seat / vacated desk)"\n'
+            "}\n"
+            "Output valid JSON only with no preamble."
+        )
+
+    input_desc = f"INPUT: {n_frames} consecutive frames, about {interval} seconds apart, from a {camera_angle} camera. Students are identified by seat label: {seat_labels}."
+    decide_rule = "STEP 2 - DECIDE each indicator using these rules. Answer \"yes\" only if the criteria are met across the frames. A single frame is never enough."
+    gaze_example = '["paper", "lap", "paper"]'
+
+    return (
+        "You are an exam-proctoring analysis assistant. Your output goes to a HUMAN REVIEWER, who makes all decisions. "
+        "You report only what is clearly visible. A false accusation is worse than a missed ambiguous case. "
+        "Never infer intent. If evidence is partial, occluded, blurry, or ambiguous, answer \"uncertain\", never \"yes\".\n\n"
+        f"{input_desc}\n"
+        f"EXAM RULES: {exam_rules}.\n\n"
+        "STEP 1 - OBSERVE (do this first, facts only):\n"
+        "For each visible student, note: head direction (exam paper / lap / left neighbor / right neighbor / ahead / up / other), "
+        "whether both hands are visible on the desk, and anything held or worn. Then note any paper or object near the boundary between two desks.\n\n"
+        f"{decide_rule}\n\n"
+        "1. phone_visible: a phone or glowing handheld screen is clearly seen in hand, lap, or under the desk.\n\n"
+        "2. hidden_device_behavior (for phones that cannot be seen): ALL of these:\n"
+        "   - head tilted down toward the lap or below the desk edge, NOT toward the exam paper,\n"
+        "   - at least one hand out of view below the desk, and not holding a pen,\n"
+        "   Screen glow on the face or lap strengthens this.\n\n"
+        "3. unauthorized_notes: loose paper, slips or written notes that are separate from the exam paper AND are hidden, held below the desk, or concealed.\n\n"
+        "4. wearable_audio: an earbud, headphone or earpiece clearly inserted in or covering an ear. Hearing aids and earplugs are NOT violations.\n\n"
+        "5. peeking: head AND eyes are clearly directed at a neighbor's paper or desk. A sideways head turn alone is not peeking.\n\n"
+        "6. mutual_gaze (pair of adjacent students): BOTH students are facing each other. Brief eye contact is normal.\n\n"
+        "7. communication: mutual gaze OR one student turned toward another, PLUS speaking or gesturing visible. One open mouth is not enough.\n\n"
+        "8. paper_exchange: a sheet or object moves from one student's desk area into another's, or is held between two students. Name the direction and object. Passing a pen or an invigilator handling papers is NOT a violation.\n\n"
+        "NORMAL BEHAVIOR (never flag): writing; reading the exam paper; looking up, around or at the ceiling while thinking; looking at a clock; stretching, yawning, rubbing eyes; hand on face, chin or ear; adjusting hair, glasses or clothing; drinking water; raising a hand; permitted items; hearing aids, medical devices, religious or cultural head coverings; an invigilator walking past or standing near a student.\n\n"
+        "Do NOT flag a student for how they look. Judge only observable actions.\n\n"
+        "MULTI-STUDENT REQUIREMENT: Include an entry in the 'students' array for EACH labeled student visible in the image (e.g. S1, S2, S3, S4...). Include an entry in 'pairs' for each adjacent pair (e.g. [S1, S2], [S2, S3]). Never evaluate only S1 if multiple students are present.\n\n"
+        "STEP 3 - OUTPUT ONLY this JSON, with no markdown and no extra text:\n"
+        "{\n"
+        f'  "frames_analyzed": {n_frames},\n'
+        '  "observations": "3-4 factual sentences on what is visible, no conclusions",\n'
+        '  "image_quality_issues": "occlusion, blur, low light, small faces, or none",\n'
+        '  "students": [\n'
+        "    {\n"
+        '      "seat": "S1",\n'
+        f'      "gaze_per_frame": {gaze_example},\n'
+        '      "hands_visible_on_desk": "both",\n'
+        '      "phone_visible": {"verdict": "no", "confidence": 0.0},\n'
+        '      "hidden_device_behavior": {"verdict": "no", "confidence": 0.0, "frames_supporting": 0},\n'
+        '      "unauthorized_notes": {"verdict": "no", "confidence": 0.0},\n'
+        '      "wearable_audio": {"verdict": "no", "confidence": 0.0},\n'
+        '      "peeking": {"verdict": "no", "confidence": 0.0, "toward_seat": "none"}\n'
+        "    }\n"
+        "  ],\n"
+        '  "pairs": [\n'
+        "    {\n"
+        '      "seats": ["S1", "S2"],\n'
+        '      "mutual_gaze": {"verdict": "no", "confidence": 0.0, "frames_supporting": 0},\n'
+        '      "communication": {"verdict": "no", "confidence": 0.0},\n'
+        '      "paper_exchange": {\n'
+        '        "verdict": "no",\n'
+        '        "confidence": 0.0,\n'
+        '        "direction": "none",\n'
+        '        "object": "none"\n'
+        '      }\n'
+        "    }\n"
+        "  ],\n"
+        '  "invigilator_present": false,\n'
+        '  "needs_human_review": false,\n'
+        '  "review_reason": ""\n'
+        "}\n\n"
+        "Set needs_human_review to true if ANY indicator is \"yes\", or if two or more are \"uncertain\" for the same student or pair. Otherwise false."
+    )
+
+
+class LMStudioVLM:
+    """Vision Language Model client supporting both LM Studio and Ollama (LLaVA / Moondream / Qwen)."""
+
+    PROMPT_TEMPLATE = build_multiframe_proctor_prompt(n_frames=1)
+
+
 
     def __init__(self):
         self.provider = getattr(settings, "VLM_PROVIDER", "lmstudio").lower()
@@ -167,9 +225,13 @@ class LMStudioVLM:
             self.model = settings.VLM_MODEL
         self.max_tokens = settings.VLM_MAX_TOKENS
         self.timeout = settings.VLM_TIMEOUT
+        self.connect_timeout = getattr(settings, "VLM_CONNECT_TIMEOUT", 2.0)
+        self.http_timeout = httpx.Timeout(self.timeout, connect=self.connect_timeout)
         self.enabled = settings.VLM_ENABLED
         self._client: Optional[httpx.AsyncClient] = None
         self._available = False
+        self._cached_available = False
+        self._monitor_task: Optional[asyncio.Task] = None
 
     def set_provider(self, provider: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Switch VLM provider (e.g. 'lmstudio' or 'ollama') and reconfigure endpoint."""
@@ -215,19 +277,23 @@ class LMStudioVLM:
 
     async def get_available_models(self) -> List[str]:
         """Fetch all models currently available from active VLM provider REST API."""
-        if not self._client:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
+        client = self._client
+        if client is None:
+            client = httpx.AsyncClient(timeout=self.http_timeout)
+            self._client = client
         try:
             if self.provider == "ollama":
-                resp = await self._client.get(f"{self.base_url}/api/tags")
+                resp = await client.get(f"{self.base_url}/api/tags")
                 if resp.status_code == 200:
                     data = resp.json()
-                    return [m.get("name") for m in data.get("models", []) if m.get("name")]
+                    models_list = data.get("models", []) if isinstance(data, dict) else []
+                    return [str(m["name"]) for m in models_list if isinstance(m, dict) and m.get("name")]
             else:
-                resp = await self._client.get(f"{self.base_url}/models")
+                resp = await client.get(f"{self.base_url}/models")
                 if resp.status_code == 200:
                     data = resp.json()
-                    return [m.get("id") for m in data.get("data", []) if m.get("id")]
+                    data_list = data.get("data", []) if isinstance(data, dict) else []
+                    return [str(m["id"]) for m in data_list if isinstance(m, dict) and m.get("id")]
         except Exception as e:
             logger.debug(f"Failed to fetch models from {self.provider} at {self.base_url}: {e}")
         return []
@@ -238,29 +304,66 @@ class LMStudioVLM:
         logger.info(f"Active VLM model switched to: {model_id}")
         return True
 
+    @property
+    def cached_available(self) -> bool:
+        """Cached availability flag refreshed out-of-band by background monitor."""
+        return self._cached_available
+
+    async def refresh_availability(self) -> bool:
+        """Query VLM provider and update availability cache without blocking frame loop."""
+        if not self.enabled:
+            self._cached_available = False
+            return False
+        try:
+            available_ids = await self.get_available_models()
+            self._cached_available = bool(available_ids)
+            if self._cached_available and not self._available:
+                self._available = True
+                self.model = self._select_best_model(available_ids)
+            elif not self._cached_available:
+                self._available = False
+        except Exception:
+            self._cached_available = False
+            self._available = False
+        return self._cached_available
+
+    async def run_availability_monitor(self, interval_seconds: Optional[int] = None):
+        """Background daemon task that periodically checks VLM health without blocking frame loop."""
+        interval = interval_seconds or getattr(settings, "VLM_AVAILABILITY_CHECK_INTERVAL_SECONDS", 30)
+        while True:
+            await self.refresh_availability()
+            await asyncio.sleep(interval)
+
     async def initialize(self):
         if not self.enabled:
             logger.info("VLM disabled in config")
             return
         try:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
+            self._client = httpx.AsyncClient(timeout=self.http_timeout)
             available_ids = await self.get_available_models()
             if available_ids:
                 self._available = True
+                self._cached_available = True
                 self.model = self._select_best_model(available_ids)
                 logger.info(f"VLM ({self.provider}) connected to {self.base_url} (selected model: {self.model}, available: {available_ids})")
             else:
                 self._available = False
+                self._cached_available = False
                 logger.warning(f"VLM ({self.provider}) at {self.base_url} did not return any models")
         except Exception as e:
             logger.warning(f"VLM ({self.provider}) not available at {self.base_url}: {e}")
             self._available = False
+            self._cached_available = False
 
     async def shutdown(self):
+        if self._monitor_task and not self._monitor_task.done():
+            self._monitor_task.cancel()
         if self._client:
             await self._client.aclose()
 
     async def is_available(self) -> bool:
+        if getattr(settings, "VLM_CACHED_AVAILABILITY", False):
+            return self._cached_available
         if self._available and self._client is not None:
             return True
         return await self._try_init()
@@ -271,15 +374,18 @@ class LMStudioVLM:
             return False
         try:
             if self._client is None:
-                self._client = httpx.AsyncClient(timeout=self.timeout)
+                self._client = httpx.AsyncClient(timeout=self.http_timeout)
             available_ids = await self.get_available_models()
             if available_ids:
                 self._available = True
+                self._cached_available = True
                 self.model = self._select_best_model(available_ids)
             else:
                 self._available = False
+                self._cached_available = False
         except Exception:
             self._available = False
+            self._cached_available = False
         return self._available and self._client is not None
 
     async def _query_ollama(self, client: httpx.AsyncClient, frame_b64: str, prompt: str) -> Optional[str]:
@@ -320,13 +426,13 @@ class LMStudioVLM:
                     {
                         "role": "user",
                         "content": [
+                            {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{frame_b64}"
                                 }
-                            },
-                            {"type": "text", "text": prompt}
+                            }
                         ]
                     }
                 ]
@@ -377,6 +483,136 @@ class LMStudioVLM:
             end = text.rfind('}') + 1
             if start >= 0 and end > start:
                 parsed = json.loads(text[start:end])
+
+                # 1. Asymmetric Fast-Clean / Deep-Flag format
+                if "violation" in parsed:
+                    is_viol = bool(parsed.get("violation", False))
+                    if not is_viol:
+                        return VLMResult(
+                            phone_detected=False,
+                            cheating_detected=False,
+                            talking_detected=False,
+                            earbud_detected=False,
+                            peeking_detected=False,
+                            verdict="FALSE_POSITIVE",
+                            quick_reasoning=parsed.get("reason", "Normal exam behavior observed."),
+                            description=parsed.get("reason", "All candidates behaving normally."),
+                            confidence=0.0,
+                            violating_seats=[],
+                            raw_response=text,
+                            inference_time_ms=elapsed_ms
+                        )
+                    else:
+                        v_type = str(parsed.get("type", "")).upper()
+                        reason = str(parsed.get("reason") or parsed.get("description") or "Suspicious exam activity detected.")
+                        seat = str(parsed.get("seat", "")).strip()
+                        v_seats = [seat] if seat else []
+                        conf = float(parsed.get("confidence", 0.9))
+                        is_seat = ("SEAT" in v_type or "LEAV" in v_type or "MOV" in v_type or "STAND" in v_type or "VACAT" in v_type or "WALK" in v_type or "LEFT" in v_type)
+                        return VLMResult(
+                            phone_detected=("PHONE" in v_type or "DEVICE" in v_type),
+                            cheating_detected=("CHEAT" in v_type or "NOTE" in v_type or "PAPER" in v_type or "MATERIAL" in v_type or "CHIT" in v_type or "PASS" in v_type or "EXCHANGE" in v_type),
+                            talking_detected=("TALK" in v_type or "COMM" in v_type) and not is_seat,
+                            earbud_detected=("EARBUD" in v_type or "AUDIO" in v_type or "HEADPHONE" in v_type),
+                            peeking_detected=("PEEK" in v_type or "GAZE" in v_type or "LOOK" in v_type),
+                            seat_violation_detected=is_seat,
+                            verdict="CONFIRMED_VIOLATION",
+                            quick_reasoning=reason,
+                            description=reason,
+                            confidence=conf,
+                            violating_seats=v_seats,
+                            raw_response=text,
+                            inference_time_ms=elapsed_ms
+                        )
+
+                # Check for rich multi-frame proctor JSON schema (students & pairs)
+                if "students" in parsed or "pairs" in parsed:
+                    students = parsed.get("students", [])
+                    pairs = parsed.get("pairs", [])
+                    needs_review = bool(parsed.get("needs_human_review", False))
+                    review_reason = parsed.get("review_reason", "") or parsed.get("observations", "")
+
+                    phone = False
+                    cheating = False
+                    earbud = False
+                    peeking = False
+                    talking = False
+                    max_conf = 0.0
+                    violating_seats = []
+
+                    for s in students:
+                        seat_name = s.get("seat", "S1")
+                        p_vis = s.get("phone_visible", {})
+                        if isinstance(p_vis, dict) and p_vis.get("verdict") == "yes":
+                            phone = True
+                            if seat_name not in violating_seats:
+                                violating_seats.append(seat_name)
+                            max_conf = max(max_conf, float(p_vis.get("confidence", 0.9)))
+                        h_dev = s.get("hidden_device_behavior", {})
+                        if isinstance(h_dev, dict) and h_dev.get("verdict") == "yes":
+                            phone = True
+                            if seat_name not in violating_seats:
+                                violating_seats.append(seat_name)
+                            max_conf = max(max_conf, float(h_dev.get("confidence", 0.85)))
+                        u_notes = s.get("unauthorized_notes", {})
+                        if isinstance(u_notes, dict) and u_notes.get("verdict") == "yes":
+                            cheating = True
+                            if seat_name not in violating_seats:
+                                violating_seats.append(seat_name)
+                            max_conf = max(max_conf, float(u_notes.get("confidence", 0.85)))
+                        w_audio = s.get("wearable_audio", {})
+                        if isinstance(w_audio, dict) and w_audio.get("verdict") == "yes":
+                            earbud = True
+                            if seat_name not in violating_seats:
+                                violating_seats.append(seat_name)
+                            max_conf = max(max_conf, float(w_audio.get("confidence", 0.9)))
+                        peek = s.get("peeking", {})
+                        if isinstance(peek, dict) and peek.get("verdict") == "yes":
+                            peeking = True
+                            if seat_name not in violating_seats:
+                                violating_seats.append(seat_name)
+                            max_conf = max(max_conf, float(peek.get("confidence", 0.85)))
+
+                    for p in pairs:
+                        pair_seats = p.get("seats", [])
+                        pair_str = " & ".join(pair_seats) if isinstance(pair_seats, list) else str(pair_seats)
+                        comm = p.get("communication", {})
+                        if isinstance(comm, dict) and comm.get("verdict") == "yes":
+                            talking = True
+                            if pair_str not in violating_seats:
+                                violating_seats.append(pair_str)
+                            max_conf = max(max_conf, float(comm.get("confidence", 0.85)))
+                        p_ex = p.get("paper_exchange", {})
+                        if isinstance(p_ex, dict) and p_ex.get("verdict") == "yes":
+                            cheating = True
+                            if pair_str not in violating_seats:
+                                violating_seats.append(pair_str)
+                            max_conf = max(max_conf, float(p_ex.get("confidence", 0.9)))
+                        m_gaze = p.get("mutual_gaze", {})
+                        if isinstance(m_gaze, dict) and m_gaze.get("verdict") == "yes":
+                            peeking = True
+                            if pair_str not in violating_seats:
+                                violating_seats.append(pair_str)
+                            max_conf = max(max_conf, float(m_gaze.get("confidence", 0.8)))
+
+                    has_violation = (phone or cheating or earbud or peeking or talking or needs_review)
+                    verdict_str = "CONFIRMED_VIOLATION" if has_violation else "FALSE_POSITIVE"
+
+                    return VLMResult(
+                        phone_detected=phone,
+                        cheating_detected=cheating,
+                        talking_detected=talking,
+                        earbud_detected=earbud,
+                        peeking_detected=peeking,
+                        verdict=verdict_str,
+                        quick_reasoning=review_reason,
+                        description=review_reason or parsed.get("observations", "Multi-frame proctor analysis complete."),
+                        confidence=max_conf if has_violation else 0.0,
+                        violating_seats=violating_seats,
+                        raw_response=text,
+                        inference_time_ms=elapsed_ms
+                    )
+
                 plausible_val = parsed.get("plausible")
                 verdict_val = parsed.get("verdict")
                 quick_reas = parsed.get("quick_reasoning") or parsed.get("forensic_reasoning") or parsed.get("answer")
@@ -419,13 +655,16 @@ class LMStudioVLM:
         except (json.JSONDecodeError, ValueError):
             pass
 
-        # Safe fallback: only flag if explicit keywords are present (avoid false positives on 'paper' or 'desk')
+        # Safe fallback: only flag on strict machine-readable affirmative keys, never loose English words
         lower = text.lower()
-        phone_found = "phone_detected\": true" in lower or ("holding a phone" in lower or "using a phone" in lower)
-        cheat_found = "cheating_detected\": true" in lower or ("cheat sheet" in lower or "hidden notes" in lower)
-        earbud_found = "earbud_detected\": true" in lower or ("wearing earbuds" in lower or "wearing headphones" in lower)
-        talking_found = "talking_detected\": true" in lower or ("talking to" in lower or "speaking to" in lower)
-        peeking_found = "peeking_detected\": true" in lower or ("peeking" in lower or "looking at neighbor" in lower or "turning head to look at" in lower)
+        phone_found = '"phone_detected": true' in lower or '"type": "phone"' in lower
+        cheat_found = '"cheating_detected": true' in lower or '"type": "cheat' in lower or '"type": "unauthorized' in lower or '"type": "chit' in lower or '"type": "pass' in lower
+        seat_found = '"seat_violation_detected": true' in lower or '"type": "seat' in lower or '"type": "leav' in lower or '"type": "mov' in lower or '"type": "stand' in lower or '"type": "vacat' in lower
+        talking_found = ('"talking_detected": true' in lower or '"type": "talk' in lower or '"type": "comm' in lower) and not seat_found
+        earbud_found = '"earbud_detected": true' in lower or '"type": "earbud' in lower or '"type": "audio' in lower
+        peeking_found = '"peeking_detected": true' in lower or '"type": "peek' in lower
+
+        has_flag = (phone_found or cheat_found or earbud_found or talking_found or peeking_found or seat_found)
 
         return VLMResult(
             phone_detected=phone_found,
@@ -434,9 +673,11 @@ class LMStudioVLM:
             talking_detected=talking_found,
             earbud_detected=earbud_found,
             peeking_detected=peeking_found,
+            seat_violation_detected=seat_found,
             detected_objects=[],
-            description=text[:200].strip(),
-            confidence=0.8 if (phone_found or cheat_found or earbud_found or peeking_found) else 0.0,
+            description=text[:200].strip() if has_flag else "Normal exam conduct observed.",
+            confidence=0.85 if has_flag else 0.0,
+            verdict="CONFIRMED_VIOLATION" if has_flag else "FALSE_POSITIVE",
             raw_response=text,
             inference_time_ms=elapsed_ms
         )
@@ -474,7 +715,7 @@ class LMStudioVLM:
                             "messages": [
                                 {
                                     "role": "user",
-                                    "content": prompt,
+                                    "content": active_prompt,
                                     "images": [b64]
                                 }
                             ],
@@ -501,13 +742,13 @@ class LMStudioVLM:
                                 {
                                     "role": "user",
                                     "content": [
+                                        {"type": "text", "text": active_prompt},
                                         {
                                             "type": "image_url",
                                             "image_url": {
                                                 "url": f"data:image/jpeg;base64,{b64}"
                                             }
-                                        },
-                                        {"type": "text", "text": prompt}
+                                        }
                                     ]
                                 }
                             ]

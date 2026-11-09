@@ -1,3 +1,9 @@
+import os
+# Suppress Google MediaPipe internal telemetry (clearcut uploader) and glog noise
+os.environ["GLOG_minloglevel"] = "3"
+os.environ["MEDIAPIPE_DISABLE_TELEMETRY"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status, Body, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -5,8 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional, List, Dict, Any
-import os
+from typing import Optional, List, Dict, Any, Tuple, cast
 import shutil
 import uuid
 from uuid import UUID
@@ -39,7 +44,8 @@ from app.schemas import (
     UserLogin, TokenResponse, UserResponse, UserCreate, UserUpdate,
     PendingActionResponse, PendingActionApproveRequest,
     VideoAuditListItemResponse, VideoAuditDetailResponse, VideoAuditIncidentResponse,
-    VideoAuditVLMVerificationResponse
+    VideoAuditVLMVerificationResponse,
+    CameraInfo, CameraListResponse, CameraSwitchRequest, ExamCameraAssignRequest
 )
 from app.services.video_audit_service import VideoAuditService
 from app.services.video_audit_report import generate_video_audit_pdf
@@ -64,9 +70,9 @@ from app.services.mediapipe_analyzer import MediaPipeAnalyzer
 from app.services.anomaly_detector import AnomalyDetector, Alert, AlertType, AlertSeverity, MoondreamAnalysis as AnomalyMoondreamAnalysis
 from app.services.vlm_client import (
     LMStudioVLM, get_vlm_client,
-    build_instant_surety_prompt, build_forensic_reanalysis_prompt, build_custom_query_prompt
+    build_unified_prompt, build_instant_surety_prompt, build_forensic_reanalysis_prompt, build_custom_query_prompt
 )
-from app.services.redis_client import cache_get, cache_set, get_redis, is_available as redis_available, publish
+from app.services.redis_client import cache_get, cache_set, get_redis, get_async_redis, is_available as redis_available, publish
 from app.services.auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, get_current_user_optional,
@@ -237,6 +243,7 @@ class ConnectionManager:
             self.active_connections[exam_id] = []
         self.active_connections[exam_id].append(websocket)
         logger.info(f"WebSocket connected for exam {exam_id}")
+        _ensure_display_broadcaster()
 
     def disconnect(self, websocket: WebSocket, exam_id: str):
         if exam_id in self.active_connections:
@@ -361,11 +368,42 @@ async def lifespan(app: FastAPI):
     vlm_instance = LMStudioVLM()
     await vlm_instance.initialize()
     vlm = vlm_instance
+    if getattr(settings, "VLM_CACHED_AVAILABILITY", False):
+        asyncio.create_task(vlm.run_availability_monitor())
 
     if settings.ENABLE_AUDIO_ANALYSIS and audio_level_service.start():
         logger.info("Audio level service started")
 
+    _ensure_display_broadcaster()
     logger.info("All services initialized")
+
+    if getattr(settings, "RUN_STARTUP_TESTS", False):
+        # Guard against uvicorn --reload child restarts re-triggering tests repeatedly
+        if os.environ.get("ARGUS_STARTUP_TEST_RAN") == "1":
+            logger.info("[STARTUP TESTS] Background suite already ran in parent/previous worker. Skipping reload trigger.")
+        else:
+            os.environ["ARGUS_STARTUP_TEST_RAN"] = "1"
+            def _bg_startup_test_suite():
+                delay = getattr(settings, "STARTUP_TESTS_DELAY_SECONDS", 3.0)
+                logger.info(f"[STARTUP TESTS] Automated test suite scheduled in background in {delay:.1f}s (RUN_STARTUP_TESTS=True)...")
+                time.sleep(delay)
+                try:
+                    logger.info("[STARTUP TESTS] Commencing automated verification and benchmarking run (smoke subset)...")
+                    try:
+                        from tests.automated_test_suite import run_automated_suite
+                    except ImportError:
+                        from backend.tests.automated_test_suite import run_automated_suite
+                    suite_res = run_automated_suite(smoke_mode=True)
+                    summ = suite_res.get("summary", {})
+                    logger.info(
+                        f"[STARTUP TESTS] Completed: {summ.get('passed', 0)}/{summ.get('total_tests', 0)} passed "
+                        f"in {summ.get('duration_seconds', 0)}s (Status: {summ.get('overall_status', 'UNKNOWN')}). "
+                        f"Reports saved to /reports folder."
+                    )
+                except Exception as ex:
+                    logger.error(f"[STARTUP TESTS] Background execution caught error: {ex}", exc_info=True)
+
+            threading.Thread(target=_bg_startup_test_suite, daemon=True, name="ArgusStartupTestSuite").start()
 
     yield
 
@@ -410,10 +448,10 @@ async def rate_limit_middleware(request, call_next):
         ip = request.client.host if request.client else "unknown"
         key = f"ratelimit:{ip}:{request.url.path}"
         try:
-            r = get_redis()
-            count = r.incr(key)
+            r = get_async_redis()
+            count = await r.incr(key)
             if count == 1:
-                r.expire(key, 60)
+                await r.expire(key, 60)
             if count > settings.RATE_LIMIT_REQUESTS_PER_MINUTE:
                 return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
         except Exception:
@@ -458,6 +496,182 @@ async def camera_status():
         "timestamp": datetime.now(timezone.utc),
         "cameras": [stats]
     }
+
+
+# ==============================================================================
+# Camera Management & Instant Hardware Switcher Endpoints
+# ==============================================================================
+
+@app.get("/api/cameras", response_model=CameraListResponse)
+async def list_available_cameras_endpoint(refresh: bool = False):
+    """
+    List all detected physical and connected webcams (including 1080p Full HD devices).
+    """
+    if not camera_manager:
+        raise HTTPException(status_code=503, detail="Camera manager not initialized")
+
+    discovered = CameraManager.list_available_cameras(force_refresh=refresh)
+    current_source = str(camera_manager.camera_source)
+
+    # If active source is disconnected or synthetic while physical cameras are present, auto-bind to the primary physical camera
+    has_matching_cam = any(str(cam["source"]) == current_source and cam.get("working", True) for cam in discovered)
+    if (not has_matching_cam or camera_manager.is_synthetic) and discovered:
+        first_physical = next((c for c in discovered if c.get("is_physical", True)), discovered[0])
+        primary_source = str(first_physical["source"])
+        if primary_source != current_source or camera_manager.is_synthetic:
+            camera_manager.switch_source(primary_source)
+            current_source = primary_source
+
+    active_status = camera_manager.get_status()
+
+    camera_items = []
+    for cam in discovered:
+        is_active = (str(cam["source"]) == current_source)
+        camera_items.append(CameraInfo(
+            source=str(cam["source"]),
+            index=cam["index"],
+            name=cam["name"],
+            max_resolution=cam["max_resolution"],
+            is_1080p=cam.get("is_1080p", False),
+            is_active=is_active,
+            working=cam.get("working", True)
+        ))
+
+    return CameraListResponse(
+        active_source=current_source,
+        active_resolution=active_status.get("resolution", f"{camera_manager.target_width}x{camera_manager.target_height}"),
+        active_fps=int(active_status.get("target_fps", camera_manager.target_fps)),
+        is_1080p=bool(active_status.get("is_1080p", False)),
+        status=active_status.get("status", "ACTIVE"),
+        cameras=camera_items
+    )
+
+
+@app.post("/api/cameras/switch")
+async def switch_camera_endpoint(
+    req: CameraSwitchRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Instantly switch the active video ingestion camera to the specified device/webcam index.
+    Optionally saves the assigned camera to the specified exam session.
+    """
+    if not camera_manager:
+        raise HTTPException(status_code=503, detail="Camera manager not initialized")
+
+    width, height = 1920, 1080
+    if req.resolution:
+        try:
+            parts = req.resolution.lower().split("x")
+            if len(parts) == 2:
+                width, height = int(parts[0]), int(parts[1])
+        except Exception:
+            width, height = 1920, 1080
+
+    success = camera_manager.switch_source(
+        new_source=req.camera_source,
+        fps=req.fps or 30,
+        width=width,
+        height=height
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to switch to camera {req.camera_source}")
+
+    # If exam_id provided, also persist this camera as default for this exam
+    if req.exam_id:
+        try:
+            db_exam = get_exam(db, UUID(req.exam_id) if isinstance(req.exam_id, str) else req.exam_id)
+            if db_exam:
+                current_settings = {}
+                if db_exam.settings:
+                    try:
+                        current_settings = json.loads(db_exam.settings) if isinstance(db_exam.settings, str) else dict(db_exam.settings)
+                    except Exception:
+                        current_settings = {}
+                current_settings["assigned_camera_source"] = str(req.camera_source)
+                current_settings["assigned_camera_resolution"] = f"{width}x{height}"
+
+                cams = CameraManager.list_available_cameras()
+                cam_name = next((c["name"] for c in cams if str(c["source"]) == str(req.camera_source)), f"Webcam {req.camera_source}")
+                current_settings["assigned_camera_name"] = cam_name
+
+                db_exam.settings = json.dumps(current_settings)
+                db.commit()
+                db.refresh(db_exam)
+                logger.info(f"Assigned camera {req.camera_source} ('{cam_name}') to exam {db_exam.exam_id}")
+        except Exception as err:
+            logger.warning(f"Could not persist camera setting to exam {req.exam_id}: {err}")
+
+    # Broadcast notification to active WS clients
+    if current_exam_id:
+        await manager.broadcast(str(current_exam_id), {
+            "type": "camera_switched",
+            "camera_source": req.camera_source,
+            "resolution": f"{width}x{height}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+
+    status_info = camera_manager.get_status()
+    return {
+        "status": "SUCCESS",
+        "message": f"Switched to camera {req.camera_source} ({width}x{height})",
+        "camera_info": status_info
+    }
+
+
+@app.put("/api/exams/{exam_id}/camera", response_model=ExamResponse)
+async def assign_camera_to_exam_endpoint(
+    exam_id: UUID,
+    req: ExamCameraAssignRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Assign a specific connected camera to an examination session.
+    """
+    db_exam = get_exam(db, exam_id)
+    if not db_exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    width, height = 1280, 720
+    if req.resolution:
+        try:
+            parts = req.resolution.lower().split("x")
+            if len(parts) == 2:
+                width, height = int(parts[0]), int(parts[1])
+        except Exception:
+            width, height = 1280, 720
+
+    current_settings = {}
+    if db_exam.settings:
+        try:
+            current_settings = json.loads(db_exam.settings) if isinstance(db_exam.settings, str) else dict(db_exam.settings)
+        except Exception:
+            current_settings = {}
+
+    cam_name = req.camera_name
+    if not cam_name:
+        cams = CameraManager.list_available_cameras()
+        cam_name = next((c["name"] for c in cams if str(c["source"]) == str(req.camera_source)), f"Webcam {req.camera_source}")
+
+    current_settings["assigned_camera_source"] = str(req.camera_source)
+    current_settings["assigned_camera_name"] = cam_name
+    current_settings["assigned_camera_resolution"] = f"{width}x{height}"
+    db_exam.settings = json.dumps(current_settings)
+    db.commit()
+    db.refresh(db_exam)
+
+    # If this exam is currently active/selected or running, switch camera instantly
+    if camera_manager and (current_exam_id == exam_id or not pipeline_running):
+        camera_manager.switch_source(
+            new_source=req.camera_source,
+            width=width,
+            height=height
+        )
+
+    return _exam_to_response(db_exam)
+
 
 
 # ==============================================================================
@@ -678,19 +892,24 @@ async def create_exam_endpoint(
 
 @app.get("/api/exams/{exam_id}", response_model=ExamResponse)
 async def get_exam_endpoint(exam_id: UUID, db: Session = Depends(get_db)):
-    db_exam = get_exam(db, exam_id)
+    exam_id_str = str(exam_id)
+    db_exam = get_exam(db, exam_id_str)
     if not db_exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
     checked_in = db.query(func.count(Participant.participant_id)).filter(
-        Participant.exam_id == exam_id,
+        Participant.exam_id == exam_id_str,
         Participant.status == ParticipantStatus.CHECKED_IN
     ).scalar() or 0
 
-    total_events = db.query(func.count(Event.event_id)).filter(Event.exam_id == exam_id).scalar() or 0
-    high_events = db.query(func.count(Event.event_id)).filter(
-        Event.exam_id == exam_id, Event.severity == EventSeverity.HIGH
-    ).scalar() or 0
+    event_counts = dict(
+        db.query(Event.severity, func.count(Event.event_id))
+        .filter(Event.exam_id == exam_id_str)
+        .group_by(Event.severity)
+        .all()
+    )
+    total_events = sum(event_counts.values())
+    high_events = event_counts.get(EventSeverity.HIGH, 0)
 
     return _exam_to_response(
         db_exam,
@@ -782,6 +1001,22 @@ async def start_exam_endpoint(
     # Flexible toggle: query param takes precedence; otherwise fallback to settings.RECORD_FULL_SESSION
     should_record = settings.RECORD_FULL_SESSION if record_full_session is None else record_full_session
 
+    # Auto-activate exam's designated camera if configured
+    if db_exam.settings and camera_manager:
+        try:
+            st = json.loads(db_exam.settings) if isinstance(db_exam.settings, str) else db_exam.settings
+            if st and "assigned_camera_source" in st:
+                assigned_src = st["assigned_camera_source"]
+                res_str = st.get("assigned_camera_resolution", "1920x1080")
+                w, h = 1920, 1080
+                if "x" in res_str:
+                    parts = res_str.split("x")
+                    w, h = int(parts[0]), int(parts[1])
+                camera_manager.switch_source(assigned_src, width=w, height=h)
+                logger.info(f"Auto-switched camera to assigned source {assigned_src} ({w}x{h}) for exam {exam_id}")
+        except Exception as e:
+            logger.warning(f"Failed to auto-switch assigned camera for exam {exam_id}: {e}")
+
     global pipeline_running, pipeline_task, current_exam_id, _latest_vlm_result, _track_face_counters, _track_to_participant, record_session_active
     record_session_active = should_record
     if not pipeline_running:
@@ -792,12 +1027,14 @@ async def start_exam_endpoint(
         pipeline_running = True
         pipeline_task = asyncio.create_task(run_pipeline(exam_id, record_full_session=should_record))
 
+    cam_status_dict = camera_manager.get_status() if camera_manager else {"camera_id": 0, "status": "ACTIVE", "fps": settings.CAMERA_FPS}
+
     return ExamStartResponse(
         exam_id=str(db_exam.exam_id),
         status=db_exam.status,
         started_at=db_exam.started_at,
         recording_active=should_record,
-        camera_status=[{"camera_id": 0, "status": "ACTIVE", "fps": settings.CAMERA_FPS}]
+        camera_status=[cam_status_dict]
     )
 
 
@@ -913,11 +1150,7 @@ async def reanalyze_exam_endpoint(
     db.commit()
 
     # Launch background audit worker
-    VideoAuditService.launch_audit(
-        audit_id=audit_id,
-        video_path=exam.recording_path,
-        sample_fps=body.sample_fps
-    )
+    VideoAuditService.run_audit_background(audit_id)
 
     return ExamReanalyzeResponse(
         status="AUDIT_STARTED",
@@ -973,15 +1206,23 @@ async def seed_participants_endpoint(
 
 @app.get("/api/exams/{exam_id}/participants", response_model=List[ParticipantResponse])
 async def list_participants(exam_id: UUID, page: int = 1, limit: int = 50, db: Session = Depends(get_db)):
-    db_exam = get_exam(db, exam_id)
+    exam_id_str = str(exam_id)
+    db_exam = get_exam(db, exam_id_str)
     if not db_exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
-    participants = get_participants_by_exam(db, exam_id, skip=(page-1)*limit, limit=limit)
+    participants = get_participants_by_exam(db, exam_id_str, skip=(page-1)*limit, limit=limit)
+    p_ids = [str(p.participant_id) for p in participants]
+    event_counts = {}
+    if p_ids:
+        rows = db.query(Event.participant_id, func.count(Event.event_id))\
+            .filter(Event.participant_id.in_(p_ids))\
+            .group_by(Event.participant_id).all()
+        event_counts = {r[0]: r[1] for r in rows}
 
     result = []
     for p in participants:
-        event_count = db.query(func.count(Event.event_id)).filter(Event.participant_id == p.participant_id).scalar() or 0
+        event_count = event_counts.get(str(p.participant_id), 0)
         result.append(ParticipantResponse(
             participant_id=str(p.participant_id),
             exam_id=str(p.exam_id),
@@ -1105,9 +1346,6 @@ async def get_exam_events(
         status=status_list
     )
 
-    # Automatically sweep and verify any unresolved PRELIMINARY events for this exam
-    asyncio.create_task(sweep_pending_preliminary_events(str(exam_id)))
-
     return {
         "total": total,
         "page": page,
@@ -1219,10 +1457,10 @@ async def rerun_event_analysis_endpoint(
         raise HTTPException(status_code=503, detail="VLM reasoning is disabled in system configuration")
 
     if custom_prompt:
-        prompt = build_custom_query_prompt(custom_prompt)
+        prompt = build_unified_prompt(custom_question=custom_prompt)
     else:
-        prompt = build_forensic_reanalysis_prompt(
-            event_type=getattr(event.event_type, 'value', str(event.event_type)),
+        prompt = build_unified_prompt(
+            candidate_category=getattr(event.event_type, 'value', str(event.event_type)),
             description=event.description or ""
         )
 
@@ -1232,7 +1470,18 @@ async def rerun_event_analysis_endpoint(
         vlm_reasoning = f"Needs Human Review: {clarity['reason']} — AI vision obscured."
         vlm_conf = 0.0
     else:
-        vlm_res = await vlm.analyze_image_file(event.evidence_screenshot_path, prompt=prompt)
+        global _vlm_in_flight
+        # Wait briefly (up to 1.5s) if a background frame inference is currently finishing
+        wait_start = time.time()
+        while _vlm_in_flight and (time.time() - wait_start < 1.5):
+            await asyncio.sleep(0.05)
+
+        _vlm_in_flight = True
+        try:
+            vlm_res = await vlm.analyze_image_file(event.evidence_screenshot_path, prompt=prompt)
+        finally:
+            _vlm_in_flight = False
+
         is_unclear_view = (
             vlm_res.visibility in ["obstructed", "unclear", "poor", "partial"] or
             vlm_res.verdict == "INCONCLUSIVE" or
@@ -1326,22 +1575,25 @@ async def download_event_clip(event_id: str, download: bool = False, db: Session
 
 @app.get("/api/exams/{exam_id}/analytics", response_model=ExamAnalyticsResponse)
 async def get_exam_analytics_endpoint(exam_id: UUID, db: Session = Depends(get_db)):
-    db_exam = get_exam(db, exam_id)
+    exam_id_str = str(exam_id)
+    db_exam = get_exam(db, exam_id_str)
     if not db_exam:
         raise HTTPException(status_code=404, detail="Exam not found")
 
-    stats = await get_cached_exam_analytics(exam_id)
+    stats = await get_cached_exam_analytics(exam_id_str, db=db)
 
-    events = get_events(db, exam_id=exam_id, limit=1000)
+    # Lightweight index projection query for timestamps only (avoids loading 1000 full ORM entities)
+    rows = db.query(Event.timestamp).filter(Event.exam_id == exam_id_str).all()
     timeline = {}
-    for event in events:
-        minute = int((event.timestamp - db_exam.start_time).total_seconds() / 60)
-        timeline[minute] = timeline.get(minute, 0) + 1
+    for (ts,) in rows:
+        if ts and db_exam.start_time:
+            minute = int((ts - db_exam.start_time).total_seconds() / 60)
+            timeline[minute] = timeline.get(minute, 0) + 1
 
     event_timeline = [{"minute": m, "events": c} for m, c in sorted(timeline.items())]
 
     return ExamAnalyticsResponse(
-        exam_id=str(exam_id),
+        exam_id=exam_id_str,
         timestamp=datetime.now(timezone.utc),
         summary=stats,
         event_timeline=event_timeline,
@@ -1847,12 +2099,14 @@ def check_image_clarity(image_path: str) -> dict:
 
 async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: Optional[str], event_type_val: str, description: Optional[str] = ""):
     """
-    Automatic background Tier-2 verification pass on preliminary event screenshot.
-    Uses multi-provider VLM (LM Studio / Ollama) to automatically confirm violations (AI_CONFIRMED)
-    or clear false alarms (AI_CLEARED). Automatically flags NEEDS_REVIEW ONLY when the image is
-    unclear, blurry, obstructed, or the VLM cannot determine what is happening.
-    Guaranteed idempotent: once an event is marked, it will never be checked or overwritten again.
+    Automatic background single-pass VLM verification on preliminary event screenshot.
+    Uses multi-provider VLM (LM Studio / Ollama) with the unified single-prompt architecture.
+    Guaranteed strictly non-blocking and single-flight: if VLM is busy, safely skips to preserve 30 FPS live performance.
     """
+    global _vlm_in_flight
+    if _vlm_in_flight:
+        return
+
     # Early bailout: if event is already resolved or marked, do not check again
     db = next(get_db())
     try:
@@ -1923,14 +2177,14 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
     if not vlm.enabled:
         return
 
-    try:
-        # Step 2: Instant surety verification prompt
-        prompt = build_instant_surety_prompt(candidate_category=event_type_val, cv_confidence=0.85)
-        vlm_res = await vlm.analyze_image_file(screenshot_path, prompt=prompt)
+    if _vlm_in_flight:
+        return
+    _vlm_in_flight = True
 
-        # Fallback to standard check if surety gave no response
-        if not vlm_res.raw_response:
-            vlm_res = await vlm.analyze_image_file(screenshot_path)
+    try:
+        # Step 2: Single-pass verification prompt (matching Video Audit proven architecture)
+        prompt = build_unified_prompt(candidate_category=event_type_val, description=description)
+        vlm_res = await vlm.analyze_image_file(screenshot_path, prompt=prompt)
 
         if not vlm_res.raw_response and vlm_res.inference_time_ms == 0:
             return
@@ -1990,7 +2244,8 @@ async def _auto_vlm_verify_event(exam_id: str, event_id: str, screenshot_path: O
 
     except Exception as exc:
         logger.warning(f"Auto-VLM background verification failed for event {event_id}: {exc}")
-
+    finally:
+        _vlm_in_flight = False
 
 
 async def _log_and_broadcast(exam_id: str, event_data, frame, overlays):
@@ -2002,34 +2257,38 @@ async def _log_and_broadcast(exam_id: str, event_data, frame, overlays):
         event = await loop.run_in_executor(None, lambda: el.log_event(event_data, frame, overlays=overlays))
         if event:
             await broadcast_event(exam_id, event)
-            # Trigger asynchronous automated VLM verification
-            ev_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
-            asyncio.create_task(_auto_vlm_verify_event(exam_id, str(event.event_id), event.evidence_screenshot_path, ev_type_str, event.description))
+            # Only trigger asynchronous automated VLM verification if VLM is idle
+            if vlm and getattr(vlm, "enabled", False) and not _vlm_in_flight:
+                ev_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+                asyncio.create_task(_auto_vlm_verify_event(exam_id, str(event.event_id), event.evidence_screenshot_path, ev_type_str, event.description))
     except Exception as e:
         logger.error(f"Event log/broadcast error: {e}")
 
 
 async def sweep_pending_preliminary_events(exam_id: Optional[str] = None):
     """
-    Background task that sweeps existing events in PRELIMINARY status
-    and automatically routes them to AI_CONFIRMED, AI_CLEARED, or NEEDS_REVIEW.
-    Ensures no card is ever left indefinitely in 'Verifying with AI...'.
+    Background task that sweeps existing events in PRELIMINARY status sequentially
+    only when VLM is idle, ensuring zero GPU saturation.
     """
+    if _vlm_in_flight:
+        return
     db = next(get_db())
     try:
         query = db.query(Event).filter(Event.status == AnomalyStatus.PRELIMINARY)
         if exam_id:
             query = query.filter(Event.exam_id == exam_id)
-        pending_events = query.limit(25).all()
+        pending_events = query.order_by(Event.timestamp.desc()).limit(5).all()
         for ev in pending_events:
+            if _vlm_in_flight:
+                break
             ev_type_str = ev.event_type.value if hasattr(ev.event_type, 'value') else str(ev.event_type)
-            asyncio.create_task(_auto_vlm_verify_event(
+            await _auto_vlm_verify_event(
                 str(ev.exam_id),
                 str(ev.event_id),
                 ev.evidence_screenshot_path,
                 ev_type_str,
                 ev.description or ""
-            ))
+            )
     except Exception as err:
         logger.warning(f"Error sweeping preliminary events: {err}")
     finally:
@@ -2051,16 +2310,36 @@ def _serialize_tracks(tracks) -> List[Dict]:
     ]
 
 
-async def get_cached_exam_analytics(exam_id) -> Dict:
-    key = f"analytics:{exam_id}"
+_local_analytics_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+
+async def get_cached_exam_analytics(exam_id, db: Optional[Session] = None) -> Dict[str, Any]:
+    exam_id_str = str(exam_id)
+    now = time.time()
+
+    # 1. Fast in-memory cache check (TTL 3s)
+    cached_mem = _local_analytics_cache.get(exam_id_str)
+    if cached_mem and (now - cached_mem[0] < 3.0):
+        return cached_mem[1]
+
+    # 2. Redis cache check
+    key = f"analytics:{exam_id_str}"
     cached = await cache_get(key)
-    if cached is not None:
-        return cached
-    db = next(get_db())
-    try:
-        stats = get_exam_analytics(db, exam_id)
-    finally:
-        db.close()
+    if isinstance(cached, dict):
+        res_dict = cast(Dict[str, Any], cached)
+        _local_analytics_cache[exam_id_str] = (now, res_dict)
+        return res_dict
+
+    # 3. Compute from DB
+    if db is not None:
+        stats = get_exam_analytics(db, exam_id_str)
+    else:
+        session = next(get_db())
+        try:
+            stats = get_exam_analytics(session, exam_id_str)
+        finally:
+            session.close()
+
+    _local_analytics_cache[exam_id_str] = (now, stats)
     await cache_set(key, stats, ttl=3)
     return stats
 
@@ -2085,47 +2364,95 @@ async def broadcast_analytics(exam_id: str, analytics: Dict):
     await manager.broadcast(exam_id, message)
 
 
+_display_broadcaster_task: Optional[asyncio.Task] = None
+
+
+def _ensure_display_broadcaster():
+    global _display_broadcaster_task
+    if _display_broadcaster_task is None or _display_broadcaster_task.done():
+        try:
+            loop = asyncio.get_running_loop()
+            _display_broadcaster_task = loop.create_task(run_global_display_broadcaster())
+        except RuntimeError:
+            pass
+
+
+async def run_global_display_broadcaster():
+    """Continuously broadcast live camera frames at 30 FPS to connected WebSocket clients with zero lag."""
+    global camera_manager, manager, pipeline_running, current_exam_id, latest_analyzed_tracks, event_logger, session_recorder
+    logger.info("Global live display broadcaster started (30 FPS Low-Latency)")
+    target_interval = 1.0 / 30.0
+    last_frame_number = -1
+    last_meta_time = 0.0
+
+    while True:
+        try:
+            start = time.perf_counter()
+            active_rooms = [eid for eid, conns in manager.active_connections.items() if len(conns) > 0]
+            if not active_rooms or not camera_manager:
+                await asyncio.sleep(0.04)
+                continue
+
+            if not camera_manager.is_running:
+                camera_manager.start()
+
+            frame_data = camera_manager.get_display_frame()
+            if frame_data is not None and frame_data.frame_number != last_frame_number:
+                last_frame_number = frame_data.frame_number
+                raw_frame = frame_data.frame
+
+                if pipeline_running:
+                    if event_logger:
+                        event_logger.add_frame(0, raw_frame)
+                    if session_recorder:
+                        session_recorder.add_frame(raw_frame)
+
+                # Crisp HD preview frame sizing for ultra-fast GPU canvas blit
+                h, w = raw_frame.shape[:2]
+                if w > 1280:
+                    disp_frame = cv2.resize(raw_frame, (1280, int(h * (1280.0 / w))), interpolation=cv2.INTER_LINEAR)
+                else:
+                    disp_frame = raw_frame
+
+                # Direct C++ encode: OPTIMIZE=0 disables slow multi-pass Huffman for < 0.8ms encode time
+                jpeg_bytes = cv2.imencode(
+                    '.jpg', disp_frame, [cv2.IMWRITE_JPEG_QUALITY, 72, cv2.IMWRITE_JPEG_OPTIMIZE, 0]
+                )[1].tobytes()
+
+                now = time.time()
+                with _tracks_lock:
+                    tracks_copy = list(latest_analyzed_tracks)
+
+                for room_id in active_rooms:
+                    await manager.broadcast_bytes(room_id, jpeg_bytes)
+                    is_active_exam = (pipeline_running and str(current_exam_id) == room_id)
+                    # Only send frame_meta when tracks are present, or at 1Hz heartbeat to eliminate network spam
+                    if is_active_exam and (len(tracks_copy) > 0 or (now - last_meta_time >= 1.0)):
+                        last_meta_time = now
+                        await manager.broadcast(room_id, {
+                            "type": "frame_meta",
+                            "camera_id": 0,
+                            "tracks": tracks_copy,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+
+            elapsed = time.perf_counter() - start
+            sleep_dur = max(0.001, target_interval - elapsed)
+            await asyncio.sleep(sleep_dur)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.debug(f"Display broadcaster loop error: {e}")
+            await asyncio.sleep(0.02)
+
+    logger.info("Global display broadcaster stopped")
+
+
 async def run_display_loop(exam_id: UUID):
-    """Lightweight display loop: encode latest frame as JPEG, broadcast binary + metadata."""
-    global pipeline_running, current_exam_id
-
-    if not camera_manager:
-        logger.error("Camera manager not initialized")
-        return
-    cm = camera_manager
-
-    logger.info("Display loop started")
-    loop = asyncio.get_event_loop()
-    frame_interval = 1.0 / 30
-
+    """Compatibility alias for single exam loop; stays active while exam pipeline is running."""
+    _ensure_display_broadcaster()
     while pipeline_running and current_exam_id == exam_id:
-        start = time.time()
-        frame_data = cm.get_display_frame()
-        if frame_data is not None:
-            raw_frame = frame_data.frame
-            if event_logger:
-                event_logger.add_frame(0, raw_frame)
-            if session_recorder:
-                session_recorder.add_frame(raw_frame)
-
-            jpeg_bytes = await loop.run_in_executor(None, lambda: cv2.imencode(
-                '.jpg', raw_frame, [cv2.IMWRITE_JPEG_QUALITY, 50]
-            )[1].tobytes())
-
-            await manager.broadcast_bytes(str(exam_id), jpeg_bytes)
-
-            with _tracks_lock:
-                tracks_copy = list(latest_analyzed_tracks)
-            await manager.broadcast(str(exam_id), {
-                "type": "frame_meta",
-                "camera_id": 0,
-                "tracks": tracks_copy,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        elapsed = time.time() - start
-        await asyncio.sleep(max(0, frame_interval - elapsed))
-
-    logger.info("Display loop stopped")
+        await asyncio.sleep(0.5)
 
 
 async def _run_vlm(frame: np.ndarray):
@@ -2135,14 +2462,29 @@ async def _run_vlm(frame: np.ndarray):
     vlm_client = vlm
     _vlm_in_flight = True
     try:
-        _, buf = await asyncio.get_event_loop().run_in_executor(None, lambda: cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60]))
+        # Scale to optimal VLM vision token resolution (max 512px) for ultra-fast inference
+        vh, vw = frame.shape[:2]
+        max_dim = 512
+        if max(vh, vw) > max_dim:
+            scale = max_dim / float(max(vh, vw))
+            vlm_input_frame = cv2.resize(frame, (int(vw * scale), int(vh * scale)), interpolation=cv2.INTER_AREA)
+        else:
+            vlm_input_frame = frame
+
+        _, buf = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: cv2.imencode('.jpg', vlm_input_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        )
         try:
+            logger.info("VLM: Dispatching candidate frame to VLM provider for analysis...")
             result = await vlm_client.analyze_frame(base64.b64encode(buf).decode('utf-8'))
             _latest_vlm_result = result
-            if result.phone_detected or result.cheating_detected:
-                logger.info(f"VLM: phone={result.phone_detected} cheat={result.cheating_detected} conf={result.confidence:.2f}")
+            logger.info(
+                f"VLM: Inference complete ({result.inference_time_ms:.0f}ms) — "
+                f"phone={result.phone_detected}, cheat={result.cheating_detected}, conf={result.confidence:.2f}, "
+                f"desc='{result.description}'"
+            )
         except Exception as e:
-            logger.debug(f"VLM error: {e}")
+            logger.warning(f"VLM inference error: {e}")
     finally:
         _vlm_in_flight = False
 
@@ -2189,7 +2531,12 @@ async def run_analysis_loop(exam_id: UUID):
 
             # VLM inference: send high-res cropped person region if available, else full frame
             vlm_counter += 1
-            if vlm_counter >= 30 and vlm and await vlm.is_available() and not _vlm_in_flight:
+            if getattr(settings, "VLM_CACHED_AVAILABILITY", False):
+                vlm_ready = bool(vlm and vlm.cached_available and not _vlm_in_flight)
+            else:
+                vlm_ready = bool(vlm and await vlm.is_available() and not _vlm_in_flight)
+
+            if vlm_counter >= 15 and vlm_ready:
                 vlm_counter = 0
                 vlm_frame = frame
                 if tracks:

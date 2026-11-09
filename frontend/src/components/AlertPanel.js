@@ -152,21 +152,21 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
     <div className="h-full flex flex-col bg-[#f5f5f7] dark:bg-[#000000] overflow-hidden min-h-0">
       {/* Header & Filter Controls (Apple Frosted Bar) */}
       <div className="flex-shrink-0 p-4 sm:p-5 border-b border-black/[0.08] dark:border-white/[0.08] bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3.5">
-          <div>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3.5">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#ff3b30] breathe-dot" />
-              <h2 className="text-sm font-semibold tracking-tight text-[#1d1d1f] dark:text-white">
+              <span className="w-2 h-2 rounded-full bg-[#ff3b30] breathe-dot shrink-0" />
+              <h2 className="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d1f] dark:text-white whitespace-nowrap">
                 Behavior Inquiries & Alerts
               </h2>
             </div>
-            <p className="text-xs text-[#86868b] mt-0.5">
+            <p className="text-xs text-[#86868b] mt-0.5 leading-relaxed">
               Automated behavioral observations flagged by computer vision and multimodal review.
             </p>
           </div>
 
           {/* Lifecycle Status & Event Type Filters */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap shrink-0">
             {/* Status Filter */}
             <select
               value={filterStatus}
@@ -182,12 +182,12 @@ function AlertPanel({ alerts, participants, onViewIncident }) {
             </select>
 
             {/* Event Type Filter */}
-            <div className="flex items-center gap-1.5">
-              <Filter size={12} className="text-[#86868b]" />
+            <div className="flex items-center gap-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus-within:border-[#0071e3] rounded-xl px-2.5 py-1 text-xs transition-all">
+              <Filter size={12} className="text-[#86868b] shrink-0" />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus:border-[#0071e3] rounded-xl px-3 py-1.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 cursor-pointer transition-all"
+                className="bg-transparent border-none text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none cursor-pointer"
               >
                 <option value="all">All Anomaly Types</option>
                 <option value="PEEKING_NEIGHBOR_PAPER">Neighbor Peeking (Rubbernecking)</option>

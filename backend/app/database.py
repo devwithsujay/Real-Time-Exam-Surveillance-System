@@ -17,10 +17,12 @@ db_url = f"sqlite:///{_db_path.replace(os.sep, '/')}"
 
 engine = create_engine(
     db_url,
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False, "timeout": 30.0},
     poolclass=QueuePool,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=25,
+    max_overflow=25,
+    pool_timeout=30.0,
+    pool_recycle=1800,
     echo=settings.SQLALCHEMY_ECHO
 )
 
@@ -29,8 +31,10 @@ def _set_sqlite_pragma(dbapi_conn, _):
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA cache_size=-64000")
     cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA mmap_size=268435456")
     cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -38,7 +42,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-    # Check and perform lightweight column additions for existing SQLite database
+    # Check and perform lightweight column additions and speed indexes for existing SQLite database
     try:
         with engine.begin() as conn:
             result = conn.execute(text("PRAGMA table_info(video_audit_incidents)")).fetchall()
@@ -58,6 +62,15 @@ def init_db():
             existing_exam_cols = {row[1] for row in exams_info}
             if existing_exam_cols and "recording_path" not in existing_exam_cols:
                 conn.execute(text("ALTER TABLE exams ADD COLUMN recording_path VARCHAR(500)"))
+
+            # High-performance query indexes for instant data fetching:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_created_at ON exams (created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_event_exam_severity ON events (exam_id, severity)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_event_exam_type ON events (exam_id, event_type)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_event_exam_status ON events (exam_id, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_participant_exam_status ON participants (exam_id, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_participant_exam_risk ON participants (exam_id, risk_score)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_event_timestamp ON events (timestamp)"))
     except Exception as e:
         # Ignore if table doesn't exist yet or columns already exist
         pass

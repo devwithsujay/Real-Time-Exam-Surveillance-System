@@ -2,7 +2,7 @@
  * Centralized API Service for Real-Time Exam Surveillance System.
  */
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
@@ -162,6 +162,13 @@ export const api = {
   system: {
     health: () => request('/health'),
     cameras: () => request('/health/cameras'),
+  },
+
+  // Connected Webcams & Camera Management
+  cameras: {
+    list: (refresh = false) => request(`/api/cameras${refresh ? '?refresh=true' : ''}`),
+    switch: (data) => request('/api/cameras/switch', { method: 'POST', body: JSON.stringify(data) }),
+    assignToExam: (examId, data) => request(`/api/exams/${examId}/camera`, { method: 'PUT', body: JSON.stringify(data) }),
   },
 
   // Video Forensic Audit (Phase 6)

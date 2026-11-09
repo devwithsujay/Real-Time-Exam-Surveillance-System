@@ -3,7 +3,7 @@ import numpy as np
 import time
 import threading
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 import logging
 
@@ -23,9 +23,13 @@ class FrameData:
 
 class CameraManager:
     """
-    Manages camera input with configurable FPS and resolution.
+    Manages camera input with configurable FPS, resolution, and instant hardware switching.
     Includes automatic synthetic stream fallback if no physical webcam is detected.
+    Supports dynamic enumeration of connected webcams (including 1080p Full HD devices).
     """
+
+    _cached_cameras: Optional[List[Dict[str, Any]]] = None
+    _cached_cameras_time: float = 0.0
 
     def __init__(
         self,
@@ -45,6 +49,7 @@ class CameraManager:
         self.capture_thread: Optional[threading.Thread] = None
 
         self.frame_count = 0
+        self.dropped_frames = 0
         self.last_frame_time: float = 0.0
         self.fps_actual = 0.0
         self.error_count = 0
@@ -52,6 +57,202 @@ class CameraManager:
         self._lock = threading.Lock()
         self._latest_frame: Optional[FrameData] = None
         self._latest_lock = threading.Lock()
+
+    @classmethod
+    def list_available_cameras(cls, max_tested: int = 5, force_refresh: bool = False) -> List[Dict[str, Any]]:
+        """
+        Enumerate ONLY physical hardware cameras (inbuilt laptop webcams and USB webcams).
+        Strictly filters out all software, broadcasting, and virtual filter devices (e.g. NVIDIA Broadcast, OBS, DroidCam).
+        """
+        now = time.time()
+        if not force_refresh and cls._cached_cameras is not None and (now - cls._cached_cameras_time < 30.0):
+            return cls._cached_cameras
+
+        VIRTUAL_CAMERA_KEYWORDS = [
+            'nvidia', 'broadcast', 'obs', 'virtual', 'droidcam', 'iriun',
+            'epoccam', 'camo', 'manycam', 'xsplit', 'snap camera', 'vmix',
+            'splitcam', 'screen', 'loopback', 'ndi', 'dummy', 'fake'
+        ]
+
+        discovered = []
+
+        # Step 1: DirectShow hardware device query via pygrabber (Windows native hardware bus)
+        try:
+            from pygrabber.dshow_graph import FilterGraph
+            graph = FilterGraph()
+            raw_devices = graph.get_input_devices()
+            for idx, raw_name in enumerate(raw_devices):
+                name_lower = raw_name.lower()
+                # Exclude any virtual or software driver
+                if any(kw in name_lower for kw in VIRTUAL_CAMERA_KEYWORDS):
+                    continue
+
+                is_1080p = any(term in name_lower for term in ['1080', 'fhd', 'full hd', '1080p', 'hd pro', 'pro hd'])
+                res_str = '1920x1080' if is_1080p else '1280x720'
+
+                discovered.append({
+                    "source": str(idx),
+                    "index": idx,
+                    "name": raw_name,
+                    "hardware_name": raw_name,
+                    "max_resolution": res_str,
+                    "is_1080p": is_1080p,
+                    "is_physical": True,
+                    "working": True
+                })
+        except Exception as ex:
+            logger.debug(f"DirectShow filter graph enumeration fallback: {ex}")
+
+        # Step 2: Fallback to index probe if pygrabber finds nothing
+        if not discovered:
+            for idx in range(max_tested):
+                try:
+                    cap = cv2.VideoCapture(idx)
+                    if cap is not None and cap.isOpened():
+                        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
+                        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+                        w_max = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        h_max = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        is_1080p = (w_max >= 1920 and h_max >= 1080)
+                        res_str = f"{w_max}x{h_max}" if (w_max > 0 and h_max > 0) else f"{w}x{h}"
+
+                        label = f"USB / Inbuilt Webcam {idx}"
+                        if is_1080p:
+                            label += " (1080p FHD)"
+                        else:
+                            label += f" ({res_str})"
+
+                        discovered.append({
+                            "source": str(idx),
+                            "index": idx,
+                            "name": label,
+                            "hardware_name": label,
+                            "max_resolution": res_str,
+                            "is_1080p": is_1080p,
+                            "is_physical": True,
+                            "working": True
+                        })
+                        cap.release()
+                except Exception as ex:
+                    logger.debug(f"Fallback probe error index {idx}: {ex}")
+
+        if not discovered:
+            discovered.append({
+                "source": "0",
+                "index": 0,
+                "name": "Simulated Proctored Stream (Demo)",
+                "hardware_name": "Demo Stream",
+                "max_resolution": "1280x720",
+                "is_1080p": False,
+                "is_physical": False,
+                "working": True
+            })
+
+        cls._cached_cameras = discovered
+        cls._cached_cameras_time = now
+        return discovered
+
+    @staticmethod
+    def _open_capture(source_str: str, width: int, height: int, fps: int) -> Optional[cv2.VideoCapture]:
+        """
+        Open physical camera with Windows DirectShow backend,
+        and single-frame buffering to eliminate video delay and frame latency.
+        """
+        try:
+            src = int(source_str) if source_str.isdigit() else source_str
+            # DirectShow on Windows with buffer size = 1 gives lowest latency capture
+            if isinstance(src, int) and hasattr(cv2, 'CAP_DSHOW'):
+                cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)
+            else:
+                cap = cv2.VideoCapture(src)
+
+            if cap is not None and cap.isOpened():
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                cap.set(cv2.CAP_PROP_FPS, fps)
+                return cap
+        except Exception as ex:
+            logger.debug(f"DirectShow open failed for {source_str}: {ex}")
+
+        # Fallback to standard open if DirectShow fails
+        try:
+            src = int(source_str) if source_str.isdigit() else source_str
+            cap = cv2.VideoCapture(src)
+            if cap is not None and cap.isOpened():
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                return cap
+        except Exception as ex:
+            logger.debug(f"Standard open failed for {source_str}: {ex}")
+
+        return None
+
+    def switch_source(
+        self,
+        new_source: str,
+        fps: Optional[int] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None
+    ) -> bool:
+        """
+        Instantly switch camera device source on the fly without stopping downstream loops.
+        """
+        with self._lock:
+            self.camera_source = new_source
+            if fps is not None and fps > 0:
+                self.target_fps = fps
+            if width is not None and width > 0:
+                self.target_width = width
+            if height is not None and height > 0:
+                self.target_height = height
+
+            if not self.is_running:
+                logger.info(f"Camera source configured to {self.camera_source} ({self.target_width}x{self.target_height}) [Standby]")
+                return True
+
+            # Release previous physical stream
+            if self.cap is not None:
+                try:
+                    self.cap.release()
+                except Exception as e:
+                    logger.debug(f"Error releasing previous capture: {e}")
+                self.cap = None
+
+            try:
+                new_cap = self._open_capture(
+                    self.camera_source,
+                    self.target_width,
+                    self.target_height,
+                    self.target_fps
+                )
+
+                # If requested camera failed to open and source is not "0", attempt auto-recovery to physical camera 0
+                if (new_cap is None or not new_cap.isOpened()) and str(self.camera_source) != "0":
+                    logger.info(f"Camera source {self.camera_source} unavailable; attempting fallback to primary camera 0...")
+                    fallback_cap = self._open_capture("0", self.target_width, self.target_height, self.target_fps)
+                    if fallback_cap is not None and fallback_cap.isOpened():
+                        new_cap = fallback_cap
+                        self.camera_source = "0"
+                        logger.info("Successfully recovered using physical camera 0")
+
+                if new_cap is not None and new_cap.isOpened():
+                    self.cap = new_cap
+                    self.is_synthetic = False
+                    self.error_count = 0
+                    logger.info(f"Successfully switched live feed to camera {self.camera_source} ({self.target_width}x{self.target_height} @ {self.target_fps} FPS)")
+                else:
+                    logger.warning(f"Could not open camera {self.camera_source}. Running in synthetic fallback mode.")
+                    self.is_synthetic = True
+                    self.cap = None
+                return True
+            except Exception as e:
+                logger.error(f"Error switching camera source: {e}")
+                self.is_synthetic = True
+                return False
 
     def start(self) -> bool:
         """Initialize and start camera capture. Falls back to synthetic demo stream if physical camera is unavailable."""
@@ -61,30 +262,36 @@ class CameraManager:
                 return True
 
             try:
-                # Parse camera source
-                if self.camera_source.isdigit():
-                    source = int(self.camera_source)
-                else:
-                    source = self.camera_source
+                new_cap = self._open_capture(
+                    self.camera_source,
+                    self.target_width,
+                    self.target_height,
+                    self.target_fps
+                )
 
-                self.cap = cv2.VideoCapture(source)
-                self.is_synthetic = False
+                # If primary source failed and wasn't "0", try probing physical camera 0 before giving up
+                if (new_cap is None or not new_cap.isOpened()) and str(self.camera_source) != "0":
+                    logger.info(f"Camera {self.camera_source} unavailable on startup; probing primary physical camera 0...")
+                    fallback_cap = self._open_capture("0", self.target_width, self.target_height, self.target_fps)
+                    if fallback_cap is not None and fallback_cap.isOpened():
+                        new_cap = fallback_cap
+                        self.camera_source = "0"
+                        logger.info("Successfully bound to primary physical camera 0")
 
-                if not self.cap.isOpened():
+                if new_cap is None or not new_cap.isOpened():
                     logger.warning(f"Could not open physical camera {self.camera_source}. Running in SYNTHETIC DEMO mode.")
                     self.is_synthetic = True
+                    self.cap = None
                     actual_fps = float(self.target_fps)
                     actual_width = self.target_width
                     actual_height = self.target_height
                 else:
-                    # Set camera properties
-                    self.cap.set(cv2.CAP_PROP_FPS, self.target_fps)
-                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.target_width)
-                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.target_height)
+                    self.cap = new_cap
+                    self.is_synthetic = False
                     actual_fps = self.cap.get(cv2.CAP_PROP_FPS) or float(self.target_fps)
                     actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or self.target_width
                     actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or self.target_height
-                    logger.info(f"Physical camera opened: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
+                    logger.info(f"Physical camera opened: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS (DirectShow MJPG)")
 
                 self.is_running = True
                 self.frame_count = 0
@@ -125,7 +332,7 @@ class CameraManager:
         # Header bar
         cv2.rectangle(img, (0, 0), (self.target_width, 55), (15, 20, 28), -1)
         ts_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(img, f"CAMERA 0 [DEMO / SYNTHETIC STREAM] - {ts_str}", (20, 35),
+        cv2.putText(img, f"CAMERA {self.camera_source} [DEMO / SYNTHETIC STREAM] - {ts_str}", (20, 35),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 140), 2)
         cv2.putText(img, f"FRAME: {self.frame_count} | {self.target_fps} FPS", (self.target_width - 320, 35),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (170, 185, 205), 1)
@@ -133,8 +340,8 @@ class CameraManager:
         return img
 
     def _capture_loop(self):
-        """Background thread for frame capture."""
-        frame_interval = 1.0 / self.target_fps
+        """Background thread for hardware and synthetic frame capture."""
+        frame_interval = 1.0 / max(1, self.target_fps)
 
         while self.is_running:
             loop_start = time.time()
@@ -142,9 +349,14 @@ class CameraManager:
             try:
                 if self.is_synthetic:
                     frame = self._generate_synthetic_frame()
+                    elapsed = time.time() - loop_start
+                    sleep_time = frame_interval - elapsed
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
                 else:
                     if self.cap is None:
                         frame = self._generate_synthetic_frame()
+                        time.sleep(0.03)
                     else:
                         ret, frame = self.cap.read()
                         if not ret or frame is None:
@@ -153,20 +365,17 @@ class CameraManager:
                                 logger.warning("Physical camera read failed repeatedly — falling back to synthetic demo")
                                 self.is_synthetic = True
                                 self.error_count = 0
-                            time.sleep(0.1)
+                            time.sleep(0.03)
                             continue
                         self.error_count = 0
+                        # Note: cap.read() blocks on hardware sensor clock (~33ms @ 30 FPS), no extra sleep needed
 
-                # Normalize frame
-                frame = self._normalize_frame(frame)
-
-                # Create frame data
                 current_time = time.time()
                 frame_data = FrameData(
                     frame=frame,
                     timestamp=current_time,
                     frame_number=self.frame_count,
-                    camera_id=0
+                    camera_id=int(self.camera_source) if self.camera_source.isdigit() else 0
                 )
 
                 with self._latest_lock:
@@ -181,16 +390,10 @@ class CameraManager:
                     if elapsed > 0:
                         self.fps_actual = self.frame_count / elapsed
 
-                # Throttle to target FPS
-                elapsed = time.time() - loop_start
-                sleep_time = frame_interval - elapsed
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-
             except Exception as e:
                 logger.error(f"Capture loop error: {e}")
                 self.error_count += 1
-                time.sleep(0.1)
+                time.sleep(0.05)
 
     def _normalize_frame(self, frame: np.ndarray) -> np.ndarray:
         """Normalize frame to target resolution."""
@@ -215,12 +418,10 @@ class CameraManager:
             if self.cap is None or not self.cap.isOpened():
                 return False
 
-        # Check if we're getting frames
         if self.frame_count == 0:
             return False
 
-        # Check recent frame rate
-        if time.time() - self.last_frame_time > 5.0:  # No frame for 5 seconds
+        if time.time() - self.last_frame_time > 5.0:
             return False
 
         return True
@@ -228,12 +429,14 @@ class CameraManager:
     def get_status(self) -> Dict[str, Any]:
         """Get camera status info."""
         return {
-            "camera_id": 0,
+            "camera_id": int(self.camera_source) if self.camera_source.isdigit() else 0,
+            "camera_source": self.camera_source,
             "status": "ACTIVE" if self.is_running and self.validate_stream() else "INACTIVE",
             "mode": "SYNTHETIC" if getattr(self, "is_synthetic", False) else "PHYSICAL",
             "fps": round(self.fps_actual, 1),
             "target_fps": self.target_fps,
             "resolution": f"{self.target_width}x{self.target_height}",
+            "is_1080p": (self.target_width >= 1920 and self.target_height >= 1080),
             "connected_since": self.connected_since,
             "frame_count": self.frame_count,
             "error_count": self.error_count

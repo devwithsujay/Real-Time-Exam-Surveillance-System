@@ -337,4 +337,63 @@ Universities, certification bodies, and remote testing platforms frequently reco
 | **4** | Whisper Audio Transcription | Eliminates ambient noise false alarms | Moderate | Sprint 4 |
 | **5** | Kubernetes Helm + KEDA | Elastic multi-institution scaling | High | Sprint 5 |
 | **6** | Pre-Recorded Video Audit | Retroactive exam grading & 10x faster human audit | Moderate | Sprint 6 |
+| **7** | Consolidated Exam Overview & Analytics Engine | Sub-50ms exam switching & 75% fewer network round-trips | Low-Moderate | Sprint 7 |
+
+---
+
+## Phase 7: Consolidated Exam Overview API & Analytics Caching Engine
+
+### Problem & Objective
+Switching exam sessions currently initiates 4 independent HTTP round-trips (`/exams/{id}`, `/participants`, `/events`, `/analytics`) against separate database sessions. Furthermore, the backend analytics cache has an aggressive 3-second TTL, causing frequent cache misses and cold SQLite timeline recalculations in Python. We need a single consolidated `GET /api/exams/{exam_id}/overview` endpoint and intelligent query/caching optimizations to guarantee sub-50ms exam switching across high-concurrency environments.
+
+### Implementation Checklist
+- [ ] Create `ExamOverviewResponse` Pydantic model bundling `exam`, `participants_preview`, `total_participants`, `recent_events`, and `analytics_summary`.
+- [ ] Implement `GET /api/exams/{exam_id}/overview` in `backend/app/main.py` executing in a single read-only DB transaction.
+- [ ] Optimize event timeline aggregation in `get_exam_analytics` using direct SQLite SQL bucketing (`strftime` or indexed integer division) instead of pulling and looping over raw Python rows.
+- [ ] Extend analytics cache TTL in `get_cached_exam_analytics`:
+  - 30–60 seconds for active/in-progress exams.
+  - 300 seconds (5 minutes) for concluded (`ENDED` / `ARCHIVED`) exams.
+- [ ] Invalidate/evict exam analytics cache selectively on significant state mutations (event creation, participant check-in).
+
+### Step-by-Step Implementation Guide
+
+1. **Overview Schema & Endpoint (`backend/app/main.py`)**:
+   ```python
+   class ExamOverviewResponse(BaseModel):
+       exam: ExamResponse
+       total_participants: int
+       participants_preview: List[ParticipantResponse]
+       recent_events: List[EventResponse]
+       summary: Dict[str, Any]
+       event_timeline: List[Dict[str, Any]]
+
+   @app.get("/api/exams/{exam_id}/overview", response_model=ExamOverviewResponse)
+   async def get_exam_overview_endpoint(exam_id: UUID, db: Session = Depends(get_db)):
+       exam_id_str = str(exam_id)
+       db_exam = get_exam(db, exam_id_str)
+       if not db_exam:
+           raise HTTPException(status_code=404, detail="Exam not found")
+       
+       total_participants = get_participants_count(db, exam_id_str)
+       participants = get_participants_by_exam(db, exam_id_str, page=1, limit=50)
+       events = get_events(db, exam_id=exam_id_str, limit=50)
+       analytics = await get_cached_exam_analytics(exam_id_str, db=db)
+       
+       return ExamOverviewResponse(
+           exam=_exam_to_response(db_exam),
+           total_participants=total_participants,
+           participants_preview=[_participant_to_response(p) for p in participants],
+           recent_events=[_event_to_response(e) for e in events],
+           summary=analytics.get("summary", analytics),
+           event_timeline=analytics.get("event_timeline", [])
+       )
+   ```
+
+2. **Adaptive TTL & SQL Timeline Aggregation**:
+   ```python
+   # Adaptive TTL based on exam status
+   ttl = 300 if db_exam.status in ("ENDED", "ARCHIVED", "COMPLETED") else 30
+   await cache_set(key, stats, ttl=ttl)
+   ```
+
 

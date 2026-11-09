@@ -18,13 +18,23 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { api } from './services/api';
 
-const WS_BASE = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
+const WS_BASE = process.env.REACT_APP_WS_URL || 'ws://127.0.0.1:8000/ws';
 
 function SurveillanceDashboard() {
   const { user, token, logout, isAdmin, isProctor } = useAuth();
   const isAuditor = user?.role === 'AUDITOR' || isAdmin;
 
   const [exam, setExam] = useState(null);
+  const examRef = useRef(exam);
+  useEffect(() => {
+    examRef.current = exam;
+  }, [exam]);
+
+  const [selectedExamId, setSelectedExamId] = useState(() => localStorage.getItem('active_exam_id') || '');
+  const [isSwitching, setIsSwitching] = useState(false);
+  const examCacheRef = useRef(new Map());
+  const activeRequestRef = useRef(null);
+
   const [examsList, setExamsList] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [events, setEvents] = useState([]);
@@ -52,30 +62,49 @@ function SurveillanceDashboard() {
     setActiveTab('incidents');
   };
 
-  // Fetch exams on mount
+  // Fetch exams on mount and auto-restore active exam
   const fetchExams = useCallback(async () => {
     try {
       const data = await api.exams.list();
       setExamsList(data || []);
-      // If proctor is scoped to specific exam, auto-select it
-      if (isProctor && user?.assigned_exam_id && data?.length > 0) {
-        const scoped = data.find(e => e.exam_id === user.assigned_exam_id);
-        if (scoped && (!exam || exam.exam_id !== scoped.exam_id)) {
-          loadExam(scoped.exam_id);
+      if (data && data.length > 0) {
+        const curExam = examRef.current;
+        // 1. If proctor is scoped to specific exam, auto-select it
+        if (isProctor && user?.assigned_exam_id) {
+          const scoped = data.find(e => e.exam_id === user.assigned_exam_id);
+          if (scoped && (!curExam || curExam.exam_id !== scoped.exam_id)) {
+            loadExam(scoped.exam_id);
+            return;
+          }
+        }
+
+        // 2. Check for running or persisted exam on page refresh
+        const activeRunningExam = data.find(e => e.status === 'IN_PROGRESS');
+        const savedExamId = localStorage.getItem('active_exam_id');
+        const savedExam = savedExamId ? data.find(e => e.exam_id === savedExamId) : null;
+
+        const targetExam = activeRunningExam || savedExam || data[0];
+        if (targetExam && (!curExam || curExam.exam_id !== targetExam.exam_id)) {
+          setSelectedExamId(targetExam.exam_id);
+          loadExam(targetExam.exam_id);
         }
       }
     } catch (err) {
       console.error('Failed to fetch exams:', err);
     }
-  }, [isProctor, user?.assigned_exam_id, exam]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProctor, user?.assigned_exam_id]);
 
   useEffect(() => {
     fetchExams();
   }, [fetchExams]);
 
-  // WebSocket connection with JWT token
+  // WebSocket connection with JWT token (deduped by exam_id to prevent redundant reconnects)
+  const activeExamId = exam?.exam_id;
+  const isOptimistic = Boolean(exam?._optimistic);
+
   useEffect(() => {
-    if (!exam) return;
+    if (!activeExamId || isOptimistic) return;
 
     let websocket;
     let reconnectTimeout;
@@ -83,7 +112,7 @@ function SurveillanceDashboard() {
 
     const connect = () => {
       const authQuery = token ? `?token=${token}` : '?token=demo';
-      websocket = new WebSocket(`${WS_BASE}/exam/${exam.exam_id}${authQuery}`);
+      websocket = new WebSocket(`${WS_BASE}/exam/${activeExamId}${authQuery}`);
       websocket.binaryType = 'arraybuffer';
       setWs(websocket);
 
@@ -170,42 +199,139 @@ function SurveillanceDashboard() {
       clearTimeout(reconnectTimeout);
       if (websocket) websocket.close();
     };
-  }, [exam, token]);
+  }, [activeExamId, isOptimistic, token]);
 
   const registerFrameHandler = useCallback((handler) => {
     frameHandlersRef.current.add(handler);
     return () => frameHandlersRef.current.delete(handler);
   }, []);
 
-  const loadExam = async (examId) => {
-    setLoading(true);
+  const loadExam = async (examId, options = {}) => {
+    if (!examId) return;
+    const { bypassCache = false } = options;
+    activeRequestRef.current = examId;
+    setSelectedExamId(examId);
     setError(null);
+
+    // 1. Instant SWR In-Memory Cache Hydration (0ms Switch)
+    const cached = !bypassCache ? examCacheRef.current.get(examId) : null;
+    const isCacheFresh = cached && (Date.now() - cached.timestamp < 60000);
+
+    if (cached) {
+      setExam(cached.exam);
+      setParticipants(cached.participants || []);
+      setEvents(cached.events || []);
+      setAnalytics(cached.analytics || null);
+      setPipelineRunning(cached.exam.status === 'IN_PROGRESS');
+      localStorage.setItem('active_exam_id', examId);
+
+      // Auto-switch assigned camera source if configured
+      if (cached.exam.settings) {
+        try {
+          const st = typeof cached.exam.settings === 'string' ? JSON.parse(cached.exam.settings) : cached.exam.settings;
+          if (st?.assigned_camera_source !== undefined) {
+            api.cameras.switch({
+              camera_source: String(st.assigned_camera_source),
+              resolution: st.assigned_camera_resolution || '1920x1080'
+            }).catch(e => console.debug('Auto-switch camera on cached exam select:', e));
+          }
+        } catch (e) {
+          console.debug('Error parsing exam settings on load:', e);
+        }
+      }
+
+      // If cache is fresh, render immediately and skip redundant re-fetching
+      if (isCacheFresh) {
+        setLoading(false);
+        setIsSwitching(false);
+        return;
+      }
+    }
+
+    // 2. Optimistic Preview State from examsList
+    if (!cached) {
+      const preview = examsList.find(e => e.exam_id === examId);
+      if (preview) {
+        setExam(prev => (prev?.exam_id === examId ? prev : { ...preview, _optimistic: true }));
+      }
+    }
+
+    setIsSwitching(true);
+    if (!cached) setLoading(true);
+
     try {
-      const [examData, participantsData, eventsData, analyticsData] = await Promise.all([
+      // Tier 1: Render-Critical Core Payload (Exam Meta + Participants)
+      const [examData, participantsData] = await Promise.all([
         api.exams.get(examId),
-        api.participants.list(examId, 1, 100),
-        api.events.list(examId, { limit: 100 }),
-        api.exams.getAnalytics(examId)
+        api.participants.list(examId, 1, 100)
       ]);
 
+      if (activeRequestRef.current !== examId) return;
+
       if (examData) {
+        localStorage.setItem('active_exam_id', examId);
         setExam(examData);
         setPipelineRunning(examData.status === 'IN_PROGRESS');
+
+        if (examData.settings) {
+          try {
+            const st = typeof examData.settings === 'string' ? JSON.parse(examData.settings) : examData.settings;
+            if (st?.assigned_camera_source !== undefined) {
+              api.cameras.switch({
+                camera_source: String(st.assigned_camera_source),
+                resolution: st.assigned_camera_resolution || '1920x1080'
+              }).catch(e => console.debug('Auto-switch camera on exam select:', e));
+            }
+          } catch (e) {
+            console.debug('Error parsing exam settings on load:', e);
+          }
+        }
       }
-      if (participantsData) {
-        setParticipants(participantsData.participants || participantsData);
-      }
-      if (eventsData) {
-        setEvents(eventsData.events || eventsData);
-      }
-      if (analyticsData) {
-        setAnalytics(analyticsData);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to load exam data');
-      console.error(err);
-    } finally {
+
+      const cleanParticipants = participantsData?.participants || participantsData || [];
+      setParticipants(cleanParticipants);
+
+      // Release blocking screen state immediately: workspace is now active and usable
       setLoading(false);
+
+      // Tier 2: Deferred Heavy Data (Events Timeline + Analytics)
+      Promise.all([
+        api.events.list(examId, { limit: 100 }),
+        api.exams.getAnalytics(examId)
+      ]).then(([eventsData, analyticsData]) => {
+        if (activeRequestRef.current !== examId) return;
+
+        const cleanEvents = eventsData?.events || eventsData || [];
+        const cleanAnalytics = analyticsData || null;
+
+        if (cleanEvents) setEvents(cleanEvents);
+        if (cleanAnalytics) setAnalytics(cleanAnalytics);
+
+        // Commit to in-memory SWR cache
+        examCacheRef.current.set(examId, {
+          exam: examData,
+          participants: cleanParticipants,
+          events: cleanEvents,
+          analytics: cleanAnalytics,
+          timestamp: Date.now()
+        });
+      }).catch(err => {
+        console.debug('Deferred background events/analytics sync warning:', err);
+      }).finally(() => {
+        if (activeRequestRef.current === examId) {
+          setIsSwitching(false);
+        }
+      });
+
+    } catch (err) {
+      if (activeRequestRef.current === examId) {
+        setError(err.message || 'Failed to load exam data');
+        console.error(err);
+      }
+    } finally {
+      if (activeRequestRef.current === examId) {
+        setLoading(false);
+      }
     }
   };
 
@@ -213,8 +339,9 @@ function SurveillanceDashboard() {
     try {
       const data = await api.exams.create(examData);
       if (data) {
+        examCacheRef.current.delete(data.exam_id);
         await fetchExams();
-        await loadExam(data.exam_id);
+        await loadExam(data.exam_id, { bypassCache: true });
       }
     } catch (err) {
       setError(err.message || 'Failed to create exam');
@@ -226,8 +353,10 @@ function SurveillanceDashboard() {
     try {
       const data = await api.exams.start(exam.exam_id, recordFullSession);
       if (data) {
-        setExam(prev => ({ ...prev, status: data.status, started_at: data.started_at }));
+        examCacheRef.current.delete(exam.exam_id);
+        setExam(prev => ({ ...prev, status: data.status, started_at: data.started_at, _optimistic: false }));
         setPipelineRunning(true);
+        fetchExams();
       }
     } catch (err) {
       setError(err.message || 'Failed to start exam');
@@ -235,12 +364,13 @@ function SurveillanceDashboard() {
   };
 
   const handleReanalyzeExam = async () => {
-    if (!exam || !exam.exam_id) return;
+    const target = exam || displayExam;
+    if (!target || !target.exam_id) return;
     setReanalyzing(true);
     try {
-      const res = await api.exams.reanalyze(exam.exam_id, { sample_fps: 2, enable_vlm: true });
+      const res = await api.exams.reanalyze(target.exam_id, { sample_fps: 2, enable_vlm: true });
       if (res && res.audit_id) {
-        alert(`Forensic re-analysis launched for "${exam.exam_name}"!\nCheck the Video Audits tab to track progress.`);
+        alert(`Forensic re-analysis launched for "${target.exam_name}"!\nCheck the Video Audits tab to track progress.`);
         setActiveTab('audit');
       }
     } catch (err) {
@@ -255,13 +385,16 @@ function SurveillanceDashboard() {
     try {
       const data = await api.exams.end(exam.exam_id);
       if (data) {
+        examCacheRef.current.delete(exam.exam_id);
         setExam(prev => ({
           ...prev,
           status: data.status,
           ended_at: data.ended_at,
-          recording_path: data.recording_path || prev.recording_path
+          recording_path: data.recording_path || prev.recording_path,
+          _optimistic: false
         }));
         setPipelineRunning(false);
+        fetchExams();
       }
     } catch (err) {
       setError(err.message || 'Failed to end exam');
@@ -269,16 +402,17 @@ function SurveillanceDashboard() {
   };
 
   const downloadReport = async () => {
-    if (!exam) return;
+    const target = exam || displayExam;
+    if (!target || !target.exam_id) return;
     try {
-      const blob = await api.exams.downloadReport(exam.exam_id);
+      const blob = await api.exams.downloadReport(target.exam_id);
       const pdfBlob = new Blob([blob], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(pdfBlob);
-      const safeName = (exam.exam_name || 'exam').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeName = (target.exam_name || 'exam').replace(/[^a-zA-Z0-9_-]/g, '_');
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `exam_report_${safeName}_${exam.exam_id}.pdf`;
+      a.download = `exam_report_${safeName}_${target.exam_id}.pdf`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -286,14 +420,19 @@ function SurveillanceDashboard() {
         window.URL.revokeObjectURL(url);
       }, 3000);
     } catch (err) {
-      window.location.href = `/api/exams/${exam.exam_id}/report?format=pdf`;
+      if (target?.exam_id) {
+        window.location.href = `/api/exams/${target.exam_id}/report?format=pdf`;
+      }
     }
   };
 
   const handleCheckInParticipant = async (participantId) => {
     try {
       await api.participants.checkIn(participantId);
-      if (exam) await loadExam(exam.exam_id);
+      if (exam) {
+        examCacheRef.current.delete(exam.exam_id);
+        await loadExam(exam.exam_id, { bypassCache: true });
+      }
     } catch (err) {
       console.error('Check-in failed:', err);
     }
@@ -302,7 +441,10 @@ function SurveillanceDashboard() {
   const handleCheckOutParticipant = async (participantId) => {
     try {
       await api.participants.checkOut(participantId);
-      if (exam) await loadExam(exam.exam_id);
+      if (exam) {
+        examCacheRef.current.delete(exam.exam_id);
+        await loadExam(exam.exam_id, { bypassCache: true });
+      }
     } catch (err) {
       console.error('Check-out failed:', err);
     }
@@ -312,7 +454,8 @@ function SurveillanceDashboard() {
     if (!exam) return;
     try {
       await api.participants.batchCheckIn(exam.exam_id);
-      await loadExam(exam.exam_id);
+      examCacheRef.current.delete(exam.exam_id);
+      await loadExam(exam.exam_id, { bypassCache: true });
     } catch (err) {
       console.error('Batch check-in failed:', err);
     }
@@ -322,7 +465,8 @@ function SurveillanceDashboard() {
     if (!exam) return;
     try {
       await api.participants.create(exam.exam_id, participantData);
-      await loadExam(exam.exam_id);
+      examCacheRef.current.delete(exam.exam_id);
+      await loadExam(exam.exam_id, { bypassCache: true });
     } catch (err) {
       console.error('Failed to add participant:', err);
       throw err;
@@ -333,7 +477,8 @@ function SurveillanceDashboard() {
     if (!exam) return;
     try {
       await api.participants.seedCohort(exam.exam_id, count);
-      await loadExam(exam.exam_id);
+      examCacheRef.current.delete(exam.exam_id);
+      await loadExam(exam.exam_id, { bypassCache: true });
     } catch (err) {
       console.error('Failed to seed cohort desks:', err);
       throw err;
@@ -350,6 +495,8 @@ function SurveillanceDashboard() {
     ...(isAuditor ? [{ id: 'videoAudit', label: 'Video Forensic Audit', icon: Film }] : [])
   ];
 
+  const displayExam = exam || (selectedExamId ? examsList.find(e => e.exam_id === selectedExamId) : null);
+
   const roleBadgeStyle = user?.role === 'ADMIN'
     ? 'bg-[#0071e3]/15 text-[#0071e3] dark:text-[#0a84ff] border-[#0071e3]/30'
     : user?.role === 'AUDITOR'
@@ -359,12 +506,17 @@ function SurveillanceDashboard() {
   return (
     <div className="h-screen max-h-screen bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] flex flex-col font-sans selection:bg-[#0071e3]/20 overflow-hidden transition-colors duration-200">
       {/* Top macOS Unified Toolbar (Frosted Translucent Bar) */}
-      <header className="bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl border-b border-black/[0.08] dark:border-white/[0.08] sticky top-0 z-40">
-        <div className="flex items-center justify-between h-[52px] px-4 sm:px-5">
+      <header className="bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl border-b border-black/[0.08] dark:border-white/[0.08] sticky top-0 z-40 relative">
+        {(loading || isSwitching) && (
+          <div className="apple-hairline-progress">
+            <div className="apple-hairline-progress-bar" />
+          </div>
+        )}
+        <div className="flex items-center justify-between h-[52px] px-3 sm:px-5 gap-2 min-w-0">
           {/* Left: macOS Traffic Lights + Brand & Mobile Sidebar Toggle */}
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
             {/* Native macOS Window Controls (Traffic Lights) */}
-            <div className="hidden sm:flex items-center gap-2 mr-1">
+            <div className="hidden lg:flex items-center gap-2 mr-1">
               <span className="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e]/40 shadow-xs inline-block" />
               <span className="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123]/40 shadow-xs inline-block" />
               <span className="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/40 shadow-xs inline-block" />
@@ -372,52 +524,56 @@ function SurveillanceDashboard() {
 
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-1.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              className="p-1.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
               aria-label="Toggle sidebar"
+              title={sidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
             >
-              <ChevronLeft className={`w-4 h-4 transition-transform duration-200 ${sidebarOpen ? 'rotate-180' : ''}`} />
+              <ChevronLeft className={`w-4 h-4 transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-180'}`} />
             </button>
             
             {/* Wordmark: ARGUS. with Apple blue dot */}
-            <div className="flex items-baseline gap-2">
-              <span className="font-brand font-bold text-[#1d1d1f] dark:text-white text-[17px] tracking-wide leading-none select-none">
+            <div className="flex items-baseline gap-1.5 flex-shrink-0">
+              <span className="font-brand font-bold text-[#1d1d1f] dark:text-white text-[16px] sm:text-[17px] tracking-wide leading-none select-none">
                 ARGUS<span className="text-[#0071e3]">.</span>
               </span>
-              <span className="hidden sm:inline-block text-xs italic text-[#86868b] font-normal">
+              <span className="hidden xl:inline-block text-xs italic text-[#86868b] font-normal">
                 Never blinks.
               </span>
             </div>
 
-            {/* Breadcrumb / Current Exam Session */}
-            {exam && (
-              <div className="hidden md:flex items-center gap-2 pl-3.5 border-l border-black/[0.08] dark:border-white/[0.08] text-xs">
+            {/* Breadcrumb / Current Exam Session (Visible only on large desktop screens to avoid clashing) */}
+            {displayExam && (
+              <div className="hidden 2xl:flex items-center gap-2 pl-3.5 border-l border-black/[0.08] dark:border-white/[0.08] text-xs">
                 <span className="text-[#86868b] text-[11px]">Session:</span>
-                <span className="font-medium text-[#1d1d1f] dark:text-white max-w-[180px] truncate">{exam.exam_name}</span>
-                <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${
-                  exam.status === 'IN_PROGRESS'
+                <span className="font-medium text-[#1d1d1f] dark:text-white max-w-[160px] truncate">{displayExam.exam_name}</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border uppercase tracking-wider ${
+                  displayExam.status === 'IN_PROGRESS'
                     ? 'bg-[#34c759]/10 text-[#34c759] border-[#34c759]/25 font-semibold'
                     : 'bg-black/5 dark:bg-white/10 text-[#86868b] border-transparent'
                 }`}>
-                  {exam.status.replace('_', ' ')}
+                  {displayExam.status.replace('_', ' ')}
                 </span>
+                {isSwitching && (
+                  <Loader2 size={11} className="text-[#0071e3] animate-spin ml-0.5" />
+                )}
               </div>
             )}
           </div>
 
           {/* Right: Telemetry Badges & Profile */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
             {/* Live Stream Status Pill */}
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono font-medium transition-colors ${
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono font-medium transition-colors ${
               connected 
                 ? 'bg-[#34c759]/10 text-[#34c759] border-[#34c759]/25'
                 : 'bg-black/5 dark:bg-white/10 text-[#86868b] border-transparent'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${connected ? 'bg-[#34c759] breathe-dot' : 'bg-[#86868b]'}`} />
-              <span className="hidden sm:inline font-sans">{connected ? 'Live Feed' : 'Offline'}</span>
+              <span className="hidden md:inline font-sans">{connected ? 'Live Feed' : 'Offline'}</span>
             </div>
 
-            {/* AI Engine Status Pill */}
-            <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono font-medium transition-colors ${
+            {/* AI Engine Status Pill (Compact on split screens, labeled on full desktop) */}
+            <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono font-medium transition-colors ${
               pipelineRunning
                 ? 'bg-[#0071e3]/10 text-[#0071e3] dark:text-[#0a84ff] border-[#0071e3]/25'
                 : 'bg-black/5 dark:bg-white/10 text-[#86868b] border-transparent'
@@ -430,11 +586,11 @@ function SurveillanceDashboard() {
             {isAdmin && (
               <button
                 onClick={() => setShowStaffModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#1d1d1f] dark:text-white bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 rounded-full transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#1d1d1f] dark:text-white bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 rounded-full transition-colors cursor-pointer"
                 title="Manage Staff and Role Assignments"
               >
                 <Users size={13} />
-                <span className="hidden sm:inline">Staff</span>
+                <span className="hidden xl:inline">Staff</span>
               </button>
             )}
 
@@ -443,20 +599,20 @@ function SurveillanceDashboard() {
               type="button"
               onClick={toggleTheme}
               title={isDark ? 'Switch to Light Appearance' : 'Switch to Dark Appearance'}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 transition-colors cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 transition-colors cursor-pointer"
               aria-label="Toggle appearance"
             >
-              {isDark ? <Sun size={14} className="text-amber-400 pointer-events-none" /> : <Moon size={14} className="text-[#0071e3] pointer-events-none" />}
+              {isDark ? <Sun size={13} className="text-amber-400 pointer-events-none" /> : <Moon size={13} className="text-[#0071e3] pointer-events-none" />}
             </button>
 
             <div className="w-px h-4 bg-black/[0.08] dark:border-white/[0.08]" />
 
             {/* User Profile Capsule */}
-            <div className="flex items-center gap-2 pl-1">
+            <div className="flex items-center gap-1.5 pl-0.5">
               <div className="w-7 h-7 rounded-full bg-[#0071e3] flex items-center justify-center text-xs font-semibold text-white shadow-xs">
                 {user?.username?.charAt(0)?.toUpperCase() || 'U'}
               </div>
-              <div className="hidden md:flex flex-col items-start leading-tight">
+              <div className="hidden xl:flex flex-col items-start leading-tight">
                 <span className="text-xs font-medium text-[#1d1d1f] dark:text-white">{user?.username}</span>
                 <span className={`mt-0.5 text-[9px] font-mono px-1.5 py-px rounded-full border uppercase tracking-wider font-semibold ${roleBadgeStyle}`}>
                   {user?.role}
@@ -465,7 +621,7 @@ function SurveillanceDashboard() {
               <button
                 onClick={logout}
                 title="Sign Out"
-                className="p-1.5 text-[#86868b] hover:text-[#ff3b30] hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors ml-0.5 cursor-pointer"
+                className="p-1.5 text-[#86868b] hover:text-[#ff3b30] hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors cursor-pointer"
               >
                 <LogOut size={13} />
               </button>
@@ -475,39 +631,78 @@ function SurveillanceDashboard() {
       </header>
 
       {/* Main Workspace Frame */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative min-h-0">
+        {/* Mobile Backdrop Scrim (Closes drawer on tap outside) */}
+        {sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 z-30 bg-black/25 dark:bg-black/60 backdrop-blur-xs md:hidden transition-opacity"
+            aria-label="Close sidebar overlay"
+          />
+        )}
+
         {/* Apple macOS Translucent Frosted Sidebar */}
         <aside
-          className={`fixed lg:static inset-y-[52px] left-0 z-30 w-64 flex-shrink-0 h-full bg-[#fbfbfd]/90 dark:bg-[#1c1c1e]/90 backdrop-blur-2xl border-r border-black/[0.08] dark:border-white/[0.08] transform transition-transform duration-200 ease-in-out flex flex-col min-h-0 overflow-hidden ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-          }`}
+          className={`
+            fixed md:static inset-y-0 left-0 z-40 md:z-auto
+            h-full flex-shrink-0
+            bg-[#fbfbfd]/95 dark:bg-[#1c1c1e]/95 md:bg-[#fbfbfd]/90 md:dark:bg-[#1c1c1e]/90
+            backdrop-blur-2xl border-r border-black/[0.08] dark:border-white/[0.08]
+            transition-all duration-200 ease-in-out flex flex-col min-h-0 overflow-hidden
+            ${sidebarOpen 
+              ? 'w-64 translate-x-0' 
+              : '-translate-x-full md:translate-x-0 md:w-0 md:border-r-0'
+            }
+          `}
         >
           {/* Exam Selector */}
           <div className="px-4 pt-4 pb-3 border-b border-black/[0.06] dark:border-white/[0.06]">
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
-                {isProctor && user?.assigned_exam_id ? 'Assigned Hall' : 'Exam Session'}
-              </label>
-              {examsList.length > 0 && (
-                <span className="text-xs font-mono font-medium text-[#86868b] bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
-                  {examsList.length}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+                  {isProctor && user?.assigned_exam_id ? 'Assigned Hall' : 'Exam Session'}
+                </label>
+                {examsList.length > 0 && (
+                  <span className="text-xs font-mono font-medium text-[#86868b] bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
+                    {examsList.length}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="md:hidden p-1 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <X size={14} />
+              </button>
             </div>
 
-            <select
-              value={exam?.exam_id || ''}
-              disabled={isProctor && Boolean(user?.assigned_exam_id)}
-              onChange={(e) => e.target.value && loadExam(e.target.value)}
-              className="w-full bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus:border-[#0071e3] rounded-xl px-3 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 transition-all cursor-pointer"
-            >
-              <option value="">Select session...</option>
-              {examsList.map((e) => (
-                <option key={e.exam_id} value={e.exam_id}>
-                  {e.exam_name} ({e.status})
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedExamId || exam?.exam_id || ''}
+                disabled={isProctor && Boolean(user?.assigned_exam_id)}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  if (nextId) {
+                    setSelectedExamId(nextId);
+                    loadExam(nextId);
+                  }
+                }}
+                className="w-full bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent focus:border-[#0071e3] rounded-xl pl-3 pr-8 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 transition-all cursor-pointer"
+              >
+                <option value="">Select session...</option>
+                {examsList.map((e) => (
+                  <option key={e.exam_id} value={e.exam_id}>
+                    {e.exam_name} ({e.status})
+                  </option>
+                ))}
+              </select>
+              {(loading || isSwitching) && (
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <Loader2 size={12} className="text-[#0071e3] animate-spin" />
+                </div>
+              )}
+            </div>
 
             {isAdmin && (
               <button
@@ -520,22 +715,22 @@ function SurveillanceDashboard() {
           </div>
 
           {/* Exam Lifecycle Controls */}
-          {exam && (
+          {displayExam && (
             <div className="px-4 py-3.5 border-b border-black/[0.06] dark:border-white/[0.06] space-y-2 bg-black/[0.02] dark:bg-white/[0.02]">
               <div className="flex items-center justify-between mb-0.5">
                 <span className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Status</span>
                 <span className={`text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${
-                  exam.status === 'IN_PROGRESS'
+                  displayExam.status === 'IN_PROGRESS'
                     ? 'bg-[#34c759]/15 text-[#34c759] border-[#34c759]/30'
                     : 'bg-black/5 dark:bg-white/10 text-[#86868b] border-transparent'
                 }`}>
-                  {exam.status.replace('_', ' ')}
+                  {displayExam.status.replace('_', ' ')}
                 </span>
               </div>
 
               {isAdmin ? (
                 <>
-                  {exam.status === 'CREATED' && (
+                  {displayExam.status === 'CREATED' && (
                     <>
                       <label className="flex items-center gap-2 cursor-pointer text-[11px] text-[#1d1d1f] dark:text-white/90 bg-black/[0.04] dark:bg-white/[0.04] p-2 rounded-xl border border-black/[0.06] dark:border-white/[0.06]">
                         <input
@@ -548,18 +743,18 @@ function SurveillanceDashboard() {
                       </label>
                       <button
                         onClick={startExam}
-                        disabled={loading}
-                        className="w-full ess-btn-success text-xs py-2 rounded-xl font-medium"
+                        disabled={loading || Boolean(displayExam._optimistic)}
+                        className="w-full ess-btn-success text-xs py-2 rounded-xl font-medium disabled:opacity-50"
                       >
                         <Play size={12} className="fill-white" /> Start Session
                       </button>
                     </>
                   )}
-                  {exam.status === 'IN_PROGRESS' && (
+                  {displayExam.status === 'IN_PROGRESS' && (
                     <button
                       onClick={endExam}
-                      disabled={loading}
-                      className="w-full ess-btn-danger text-xs py-2 rounded-xl font-medium"
+                      disabled={loading || Boolean(displayExam._optimistic)}
+                      className="w-full ess-btn-danger text-xs py-2 rounded-xl font-medium disabled:opacity-50"
                     >
                       <Pause size={12} className="fill-white" /> End Session
                     </button>
@@ -567,7 +762,7 @@ function SurveillanceDashboard() {
                 </>
               ) : (
                 <div className="py-2 text-center text-xs bg-black/5 dark:bg-white/5 rounded-xl text-[#86868b] font-medium">
-                  {exam.status === 'IN_PROGRESS' ? 'Surveillance Active' : 'Session on Standby'}
+                  {displayExam.status === 'IN_PROGRESS' ? 'Surveillance Active' : 'Session on Standby'}
                 </div>
               )}
 
@@ -578,10 +773,10 @@ function SurveillanceDashboard() {
                 <Download size={12} className="text-[#86868b]" /> Export Report
               </button>
 
-              {exam.recording_path && (
+              {displayExam?.recording_path && (
                 <div className="pt-2 border-t border-black/[0.06] dark:border-white/[0.06] space-y-1.5">
                   <a
-                    href={`/api/exams/${exam.exam_id}/recording?download=true`}
+                    href={`/api/exams/${displayExam.exam_id}/recording?download=true`}
                     download
                     className="w-full ess-btn-secondary text-xs py-2 rounded-xl font-medium flex items-center justify-center gap-1.5 text-[#0071e3]"
                     title="Download full continuous session video recording (H.264 MP4)"
@@ -744,6 +939,12 @@ function SurveillanceDashboard() {
                   ws={ws}
                   connected={connected}
                   registerFrameHandler={registerFrameHandler}
+                  onExamUpdate={(updated) => {
+                    if (updated?.exam_id) examCacheRef.current.delete(updated.exam_id);
+                    setExam(updated);
+                    fetchExams();
+                  }}
+                  onNavigateTab={setActiveTab}
                 />
               )}
               {activeTab === 'roster' && (
@@ -755,7 +956,7 @@ function SurveillanceDashboard() {
                   onBatchCheckIn={handleBatchCheckIn}
                   onAddParticipant={handleAddParticipant}
                   onSeedCohort={handleSeedCohort}
-                  onRefresh={() => exam && loadExam(exam.exam_id)}
+                  onRefresh={() => exam && loadExam(exam.exam_id, { bypassCache: true })}
                   loading={loading}
                 />
               )}

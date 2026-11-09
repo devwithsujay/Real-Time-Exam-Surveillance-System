@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     # Camera & Ring Buffer
     NUM_CAMERAS: int = 1
     CAMERA_FPS: int = 30
-    CAMERA_RESOLUTION_WIDTH: int = 1280
-    CAMERA_RESOLUTION_HEIGHT: int = 720
+    CAMERA_RESOLUTION_WIDTH: int = 1920
+    CAMERA_RESOLUTION_HEIGHT: int = 1080
     CAMERA_BUFFER_SIZE: int = 15
     CAMERA_TIMEOUT_SECONDS: int = 5
     CAMERA_0_SOURCE: str = "0"
@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # Feature Flags
     ENABLE_AUDIO_ANALYSIS: bool = True
     ENABLE_MULTIMODAL_ANALYSIS: bool = True
+    RUN_STARTUP_TESTS: bool = False  # Disabled by default to ensure instantaneous startup without heavy background suite
+    STARTUP_TESTS_QUICK: bool = False  # Set to True for fast dev restarts (shorter soak/buffer runs)
+    STARTUP_TESTS_DELAY_SECONDS: float = 3.0  # Warmup delay before background test suite executes
 
     # Audio Analysis
     AUDIO_BLOCK_SECONDS: float = 0.1
@@ -110,6 +113,11 @@ class Settings(BaseSettings):
     VLM_TIMEOUT: int = 60
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llava:latest"
+
+    # Phase 3c Optimization Flags (Non-blocking VLM pipeline isolation)
+    VLM_CACHED_AVAILABILITY: bool = False  # default False preserves current behavior
+    VLM_AVAILABILITY_CHECK_INTERVAL_SECONDS: int = 30
+    VLM_CONNECT_TIMEOUT: float = 2.0
 
     # Redis
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
